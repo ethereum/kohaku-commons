@@ -26,6 +26,8 @@
     "uuid": "9.0.0"
   },
   "peerDependencies": {
+    "viem": "^2.33.2",
+    "@0xbow/privacy-pools-core-sdk": "^0.1.22",
     "@ambire/signature-validator": "^1.0.3",
     "@ensdomains/eth-ens-namehash": "^2.0.15",
     "@ethersproject/abstract-signer": "^5.7.0",

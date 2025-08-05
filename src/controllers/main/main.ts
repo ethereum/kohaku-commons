@@ -85,6 +85,7 @@ import { SignMessageController } from '../signMessage/signMessage'
 import { StorageController } from '../storage/storage'
 import { SwapAndBridgeController } from '../swapAndBridge/swapAndBridge'
 import { TransferController } from '../transfer/transfer'
+import { PrivacyController } from '../privacy/privacy'
 
 const STATUS_WRAPPED_METHODS = {
   removeAccount: 'INITIAL',
@@ -151,6 +152,8 @@ export class MainController extends EventEmitter {
   swapAndBridge: SwapAndBridgeController
 
   transfer: TransferController
+
+  privacy: PrivacyController
 
   signAccountOp: SignAccountOpController | null = null
 
@@ -396,6 +399,9 @@ export class MainController extends EventEmitter {
       this.providers,
       relayerUrl
     )
+
+    this.privacy = new PrivacyController()
+
     this.domains = new DomainsController(
       this.providers.providers,
       this.networks.defaultNetworksMode
