@@ -527,6 +527,39 @@ export class RequestsController extends EventEmitter {
     if (type === 'mintVestingRequest') {
       await this.#buildMintVestingUserRequest(params)
     }
+
+    if (type === 'privateDepositRequest') {
+      await this.#buildPrivateDepositUserRequest(params)
+    }
+
+    if (type === 'privateSendRequest') {
+      await this.#buildPrivateSendUserRequest(params)
+    }
+
+    if (type === 'privateRagequitRequest') {
+      await this.#buildPrivateRagequitUserRequest(params)
+    }
+  }
+
+  async #buildPrivateDepositUserRequest(params: any) {
+    // eslint-disable-next-line
+    console.log('buildPrivateDepositUserRequest', params)
+    await this.initialLoadPromise
+    throw new Error('Not implemented')
+  }
+
+  async #buildPrivateSendUserRequest(params: any) {
+    // eslint-disable-next-line
+    console.log('buildPrivateSendUserRequest', params)
+    await this.initialLoadPromise
+    throw new Error('Not implemented')
+  }
+
+  async #buildPrivateRagequitUserRequest(params: any) {
+    // eslint-disable-next-line
+    console.log('buildPrivateRagequitUserRequest', params)
+    await this.initialLoadPromise
+    throw new Error('Not implemented')
   }
 
   async #buildUserRequestFromDAppRequest(

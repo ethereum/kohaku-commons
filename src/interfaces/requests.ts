@@ -40,3 +40,39 @@ export type BuildRequest =
         windowId?: number
       }
     }
+  | {
+      type: 'privateDepositRequest'
+      params: {
+        actionExecutionType: ActionExecutionType
+        windowId?: number
+
+        // temporary random values
+        amount: string
+        recipientAddress: string
+        selectedToken: TokenResult
+      }
+    }
+  | {
+      type: 'privateSendRequest'
+      params: {
+        actionExecutionType: ActionExecutionType
+        windowId?: number
+
+        // temporary random values
+        amount: string
+        recipientAddress: string
+        selectedToken: TokenResult
+      }
+    }
+  | {
+      type: 'privateRagequitRequest'
+      params: {
+        actionExecutionType: ActionExecutionType
+        windowId?: number
+
+        // temporary random values
+        amount: string
+        recipientAddress: string
+        selectedToken: TokenResult
+      }
+    }
