@@ -235,6 +235,7 @@ export class MainController extends EventEmitter {
     this.keystore = new KeystoreController(platform, this.storage, keystoreSigners, windowManager)
     this.#externalSignerControllers = externalSignerControllers
     this.networks = new NetworksController({
+      defaultNetworksMode: 'testnet',
       storage: this.storage,
       fetch,
       relayerUrl,
@@ -400,7 +401,7 @@ export class MainController extends EventEmitter {
       relayerUrl
     )
 
-    this.privacy = new PrivacyController()
+    // this.privacy = new PrivacyController()
 
     this.domains = new DomainsController(
       this.providers.providers,
