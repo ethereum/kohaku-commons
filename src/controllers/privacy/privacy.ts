@@ -1,36 +1,47 @@
-import {
-  Circuits,
+import type {
   CommitmentProof,
-  PrivacyPoolSDK,
+  PrivacyPoolSDK as PrivacyPoolSDKType,
   WithdrawalProofInput,
-  calculateContext,
   Withdrawal,
-  generateMerkleProof,
-  Hash,
   WithdrawalProof,
-  AccountService,
-  DataService,
+  AccountService as AccountServiceType,
+  DataService as DataServiceType,
   PoolAccount as SDKPoolAccount,
   AccountCommitment,
   ChainConfig,
   RagequitEvent,
-  PoolInfo
+  Hash as SDKHash,
+  PoolInfo as SDKPoolInfo
 } from '@0xbow/privacy-pools-core-sdk'
-import type { Address } from 'ethereumjs-util'
-import { chainData, whitelistedChains } from './config'
-import type { ChainData } from './config'
+import type { Address, Hex } from 'viem'
+import type { KeystoreController } from '../keystore/keystore'
+import { type ChainData, chainData, whitelistedChains } from './config'
+import EventEmitter from '../eventEmitter/eventEmitter'
 
-// TODO: Move this to types file
+interface PrivacyFormUpdate {
+  amount?: string
+  seedPhrase?: string
+  targetAddress?: string
+}
+
+type Hash = bigint
+
+type PoolInfo = {
+  chainId: number
+  address: Hex
+  scope: Hash
+  deploymentBlock: bigint
+}
+
 type RagequitEventWithTimestamp = RagequitEvent & {
   timestamp: bigint
 }
 
-// TODO: Move this to types file
-export type PoolAccount = SDKPoolAccount & {
+type PoolAccount = SDKPoolAccount & {
   name: number
-  balance: bigint // has spendable commitments, check with getSpendableCommitments()
-  isValid: boolean // included in ASP leaves
-  reviewStatus: ReviewStatus // ASP status
+  balance: bigint
+  isValid: boolean
+  reviewStatus: ReviewStatus
   lastCommitment: AccountCommitment
   chainId: number
   scope: Hash
@@ -45,301 +56,64 @@ export enum ReviewStatus {
   SPENT = 'spent'
 }
 
-// Extends EventEmitter when using in ambire-common
-export class PrivacyController {
-  #accountService: AccountService | null = null
+export class PrivacyController extends EventEmitter {
+  #keystore: KeystoreController | null = null
 
-  #sdk: PrivacyPoolSDK | null = null
+  #sdk: PrivacyPoolSDKType | null = null
 
-  #dataService: DataService | null = null
+  #sdkModule: any | null = null
+
+  #accountService: AccountServiceType | null = null
+
+  #dataService: DataServiceType | null = null
 
   #selectedPool: PoolInfo | null = null
 
+  #isInitialized: boolean = false
+
+  #initializationError: string | null = null
+
+  #initialPromise: Promise<void> | null = null
+
+  #initialPromiseLoaded: boolean = false
+
   amount: string = ''
 
-  targetAddress: Address | string = '' //  TODO: review this type on ambire
+  seedPhrase: string = ''
+
+  targetAddress: Address | string = ''
 
   selectedToken: string = ''
 
   selectedPoolAccount: PoolAccount | null = null
 
-  constructor() {
-    this.#sdk = this.initializeSDK()
-    this.#dataService = this.initializeDataService()
+  poolsByChain: PoolInfo[] = []
+
+  pools: PoolInfo[] = []
+
+  chainDataByWhitelistedChains: ChainData[keyof ChainData][] = []
+
+  chainData: ChainData | null = null
+
+  constructor(keystore: KeystoreController) {
+    super()
+
+    this.#keystore = keystore
+    this.#initialPromise = this.#load()
+
+    this.emitUpdate()
   }
 
-  private initializeSDK(): PrivacyPoolSDK {
-    // Ensure we have a valid baseUrl (client-side only)
-    const currentBaseUrl = typeof window !== 'undefined' ? window.location.origin : ''
-    if (!currentBaseUrl) {
-      throw new Error('SDK can only be initialized on client-side')
-    }
-
-    const circuits = new Circuits({ baseUrl: currentBaseUrl })
-    const sdk = new PrivacyPoolSDK(circuits)
-    return sdk
-  }
-
-  private initializeDataService(): DataService {
-    const dataServiceConfig: ChainConfig[] = this.poolsByChain.map((pool) => {
-      return {
-        chainId: pool.chainId,
-        privacyPoolAddress: pool.address,
-        startBlock: pool.deploymentBlock,
-        rpcUrl: chainData[pool.chainId].sdkRpcUrl,
-        apiKey: 'sdk' // It's not an api key https://viem.sh/docs/clients/public#key-optional
-      }
-    })
-
-    return new DataService(dataServiceConfig)
-  }
-
-  private poolByChainId(chainId: number) {
-    return this.poolsByChain.find((pool) => pool.chainId === chainId)
-  }
-
-  private chainDataByWhitelistedChains(): ChainData[keyof ChainData][] {
-    const filteredChainData = Object.values(chainData).filter(
+  async #load() {
+    this.chainDataByWhitelistedChains = Object.values(chainData).filter(
       (chain) =>
         chain.poolInfo.length > 0 &&
         whitelistedChains.some((c) => c.id === chain.poolInfo[0].chainId)
     )
-    return filteredChainData
-  }
 
-  public async updateForm({
-    amount,
-    targetAddress,
-    selectedToken,
-    selectedPoolAccount
-  }: {
-    amount?: string
-    targetAddress?: Address | string
-    selectedToken?: string
-    selectedPoolAccount?: PoolAccount
-  }) {
-    if (amount) {
-      this.amount = amount
-    }
-    if (targetAddress) {
-      this.targetAddress = targetAddress
-    }
-    if (selectedToken) {
-      this.selectedToken = selectedToken
+    this.poolsByChain = this.chainDataByWhitelistedChains.flatMap((chain) => chain.poolInfo)
 
-      const pool = this.poolByChainId(11155111)
-      if (!pool) {
-        throw new Error('Pool not found')
-      }
-
-      this.#selectedPool = { ...pool, scope: pool.scope as Hash }
-    }
-    if (selectedPoolAccount) {
-      this.selectedPoolAccount = selectedPoolAccount
-    }
-
-    // TODO: Emmit event
-  }
-
-  public resetForm() {
-    this.amount = ''
-    this.targetAddress = ''
-    this.selectedToken = ''
-    this.#selectedPool = null
-    this.selectedPoolAccount = null
-  }
-
-  /**
-   * Generates a zero-knowledge proof for a commitment using Poseidon hash.
-   *
-   * @param value - The value being committed to
-   * @param label - Label associated with the commitment
-   * @param nullifier - Unique nullifier for the commitment
-   * @param secret - Secret key for the commitment
-   * @returns Promise resolving to proof and public signals
-   * @throws {ProofError} If proof generation fails
-   */
-  public async generateRagequitProof(commitment: AccountCommitment): Promise<CommitmentProof> {
-    return await this.#sdk!.proveCommitment(
-      commitment.value,
-      commitment.label,
-      commitment.nullifier,
-      commitment.secret
-    )
-  }
-
-  /**
-   * Verifies a commitment proof.
-   *
-   * @param proof - The commitment proof to verify
-   * @param publicSignals - Public signals associated with the proof
-   * @returns Promise resolving to boolean indicating proof validity
-   * @throws {ProofError} If verification fails
-   */
-  public async verifyRagequitProof({ proof, publicSignals }: CommitmentProof) {
-    return await this.#sdk!.verifyCommitment({ proof, publicSignals })
-  }
-
-  /**
-   * Generates a withdrawal proof.
-   *
-   * @param commitment - Commitment to withdraw
-   * @param input - Input parameters for the withdrawal
-   * @param withdrawal - Withdrawal details
-   * @returns Promise resolving to withdrawal payload
-   * @throws {ProofError} If proof generation fails
-   */
-  public async generateWithdrawalProof(commitment: AccountCommitment, input: WithdrawalProofInput) {
-    if (!this.#sdk) {
-      throw new Error('SDK not initialized')
-    }
-
-    return this.#sdk.proveWithdrawal(
-      {
-        preimage: {
-          label: commitment.label,
-          value: commitment.value,
-          precommitment: {
-            hash: BigInt('0x1234') as Hash,
-            nullifier: commitment.nullifier,
-            secret: commitment.secret
-          }
-        },
-        hash: commitment.hash,
-        nullifierHash: BigInt('0x1234') as Hash
-      },
-      input
-    )
-  }
-
-  public async verifyWithdrawalProof(proof: WithdrawalProof) {
-    if (!this.#sdk) {
-      throw new Error('SDK not initialized')
-    }
-
-    return this.#sdk.verifyWithdrawal(proof)
-  }
-
-  /**
-   * Always recreate the accountService -because we cannot store
-   * the seed in memory due to security issues- and retrieve history
-   */
-  public async loadAccount(seed: string) {
-    if (!this.#dataService) {
-      throw new Error('DataService not initialized')
-    }
-
-    this.#accountService = new AccountService(this.#dataService, { mnemonic: seed })
-    await this.#accountService.retrieveHistory(this.pools)
-  }
-
-  public createDepositSecrets(scope: Hash) {
-    if (!this.#accountService) {
-      throw new Error('AccountService not initialized')
-    }
-
-    return this.#accountService.createDepositSecrets(scope)
-  }
-
-  public createWithdrawalSecrets(commitment: AccountCommitment) {
-    if (!this.#accountService) {
-      throw new Error('AccountService not initialized')
-    }
-
-    return this.#accountService.createWithdrawalSecrets(commitment)
-  }
-
-  // TODO: Should those function to be in utils?
-  public getContext(withdrawal: Withdrawal, scope: Hash) {
-    return calculateContext(withdrawal, scope)
-  }
-
-  public getMerkleProof(leaves: bigint[], leaf: bigint) {
-    return generateMerkleProof(leaves, leaf)
-  }
-
-  public async getPoolAccountsFromAccount(chainId: number) {
-    if (!this.#accountService) {
-      throw new Error('AccountService not initialized')
-    }
-
-    const paMap = this.#accountService.account.poolAccounts.entries()
-    const poolAccounts = []
-
-    for (const [_scope, _poolAccounts] of paMap) {
-      let idx = 1
-
-      for (const poolAccount of _poolAccounts) {
-        const lastCommitment =
-          poolAccount.children.length > 0
-            ? poolAccount.children[poolAccount.children.length - 1]
-            : poolAccount.deposit
-
-        const _chainId = Object.keys(chainData).find((key) =>
-          chainData[Number(key)].poolInfo.some((pool) => pool.scope === _scope)
-        )
-
-        const updatedPoolAccount = {
-          ...(poolAccount as PoolAccount),
-          balance: lastCommitment!.value,
-          lastCommitment: lastCommitment,
-          reviewStatus: ReviewStatus.PENDING,
-          isValid: false,
-          name: idx,
-          scope: _scope,
-          chainId: Number(_chainId)
-        }
-
-        //TODO: Replace with the right provider (Ethers.js)
-        //
-        // const publicClient = createPublicClient({
-        //   chain: whitelistedChains.find((chain: Chain) => chain.id === Number(_chainId))!,
-        //   transport: transports[Number(_chainId)],
-        // });
-
-        updatedPoolAccount.deposit.timestamp = await this.getTimestampFromBlockNumber(
-          poolAccount.deposit.blockNumber /* publicClient/provider, */
-        )
-
-        if (updatedPoolAccount.children.length > 0) {
-          updatedPoolAccount.children.forEach(async (child) => {
-            child.timestamp = await this.getTimestampFromBlockNumber(
-              child.blockNumber /* publicClient/provider */
-            )
-          })
-        }
-
-        if (updatedPoolAccount.ragequit) {
-          updatedPoolAccount.balance = 0n
-          updatedPoolAccount.reviewStatus = ReviewStatus.EXITED
-        }
-
-        if (updatedPoolAccount.ragequit) {
-          updatedPoolAccount.ragequit.timestamp = await this.getTimestampFromBlockNumber(
-            updatedPoolAccount.ragequit.blockNumber /* publicClient!, */
-          )
-        }
-
-        poolAccounts.push(updatedPoolAccount)
-        idx++
-      }
-    }
-
-    const poolAccountsByChainScope = poolAccounts.reduce((acc, curr) => {
-      acc[`${curr.chainId}-${curr.scope}`] = [...(acc[`${curr.chainId}-${curr.scope}`] || []), curr]
-      return acc
-    }, {} as Record<string, PoolAccount[]>)
-    const poolAccountsByCurrentChain = poolAccounts.filter((pa) => pa.chainId === chainId)
-
-    return { poolAccounts: poolAccountsByCurrentChain, poolAccountsByChainScope }
-  }
-
-  get poolsByChain() {
-    return this.chainDataByWhitelistedChains().flatMap((chain) => chain.poolInfo)
-  }
-
-  get pools(): PoolInfo[] {
-    return this.poolsByChain.map((pool) => {
+    this.pools = this.poolsByChain.map((pool: PoolInfo) => {
       return {
         chainId: pool.chainId,
         address: pool.address,
@@ -347,34 +121,189 @@ export class PrivacyController {
         deploymentBlock: pool.deploymentBlock
       }
     })
+
+    this.chainData = { ...chainData }
+    this.#initialPromiseLoaded = true
   }
 
-  /*
-   * *******************************************************************************************
-   *
-   * All the functions below here should be in a utils file in ambire-common
-   *
-   *********************************************************************************************
-   */
-  public async getTimestampFromBlockNumber(blockNumber: bigint /* provider: JsonRpcProvider */) {
-    // TODO: Remove this hardcoded logic when provider is implemented
-    let _blockNum = blockNumber
-    if (_blockNum) {
-      _blockNum = 1719876543n
+  public async initSDK(baseUrl: string, { force = false } = {}): Promise<void> {
+    if (this.#isInitialized && !force) return
+
+    if (typeof window === 'undefined') {
+      this.emitError({
+        level: 'major',
+        message: 'Cannot initialize SDK in service worker (no window).',
+        error: new Error('Cannot initialize SDK in service worker (no window). (initSDK)')
+      })
     }
-    // TODO: here we should use the provider from ambire-common (Ethers).
-    //
-    // if (!publicClient) throw new Error('Public client not found');
-    //
-    // const block = await publicClient.getBlock({
-    //   blockNumber,
-    // });
-    //
-    // if (!block) throw new Error('Block required to get timestamp');
-    //
-    // return block.timestamp;
-    return _blockNum
+
+    console.log('Ambire privacy: initializing SDK')
+
+    try {
+      const sdkModule = await import('@0xbow/privacy-pools-core-sdk') // webpackChunkName: "privacy-pool-sdk"
+      this.#sdkModule = sdkModule
+
+      const { Circuits, PrivacyPoolSDK, DataService } = sdkModule
+
+      const circuits = new Circuits({ baseUrl })
+
+      const dataServiceConfig: ChainConfig[] = this.poolsByChain.map((pool) => {
+        return {
+          chainId: pool.chainId,
+          privacyPoolAddress: pool.address,
+          startBlock: pool.deploymentBlock,
+          rpcUrl: chainData[pool.chainId].sdkRpcUrl,
+          apiKey: 'sdk'
+        }
+      })
+
+      this.#sdk = new PrivacyPoolSDK(circuits)
+      this.#dataService = new DataService(dataServiceConfig)
+      this.#isInitialized = true
+      this.#initializationError = null
+
+      this.emitUpdate()
+    } catch (err: any) {
+      this.#initializationError = String(err?.message ?? err)
+      this.#isInitialized = false
+      throw err
+    }
   }
 
-  // TODO: create the toJSON function in ambire-common
+  public update({ amount, seedPhrase, targetAddress }: PrivacyFormUpdate) {
+    if (amount) {
+      this.amount = amount
+    }
+
+    if (seedPhrase) {
+      this.seedPhrase = seedPhrase
+    }
+
+    if (targetAddress) {
+      this.targetAddress = targetAddress
+    }
+
+    this.emitUpdate()
+  }
+
+  public async generateRagequitProof(commitment: AccountCommitment): Promise<CommitmentProof> {
+    this.assertSdkInitialized()
+
+    return this.#sdk!.proveCommitment(
+      commitment.value,
+      commitment.label,
+      commitment.nullifier,
+      commitment.secret
+    )
+  }
+
+  public async verifyRagequitProof({ proof, publicSignals }: CommitmentProof) {
+    this.assertSdkInitialized()
+
+    return this.#sdk!.verifyCommitment({ proof, publicSignals })
+  }
+
+  public async generateWithdrawalProof(commitment: AccountCommitment, input: WithdrawalProofInput) {
+    this.assertSdkInitialized()
+
+    return this.#sdk!.proveWithdrawal(
+      {
+        preimage: {
+          label: commitment.label,
+          value: commitment.value,
+          precommitment: {
+            hash: BigInt('0x1234') as SDKHash,
+            nullifier: commitment.nullifier,
+            secret: commitment.secret
+          }
+        },
+        hash: commitment.hash,
+        nullifierHash: BigInt('0x1234') as SDKHash
+      },
+      input
+    )
+  }
+
+  public async verifyWithdrawalProof(proof: WithdrawalProof) {
+    this.assertSdkInitialized()
+
+    return this.#sdk!.verifyWithdrawal(proof)
+  }
+
+  public async loadAccount(seed: string) {
+    if (!this.#dataService || !this.#sdkModule) {
+      throw new Error('DataService not initialized. Call initSDK() first.')
+    }
+
+    const { AccountService } = this.#sdkModule
+    this.#accountService = new AccountService(this.#dataService, { mnemonic: seed })
+
+    if (this.#accountService) {
+      await this.#accountService.retrieveHistory(this.pools as SDKPoolInfo[])
+    }
+
+    console.log('Ambire ctrl: AccountService initialized', this.#accountService)
+
+    this.emitUpdate()
+  }
+
+  public createDepositSecrets(scope: Hash) {
+    if (!this.#accountService) throw new Error('AccountService not initialized')
+
+    return this.#accountService.createDepositSecrets(scope as SDKHash)
+  }
+
+  public createWithdrawalSecrets(commitment: AccountCommitment) {
+    if (!this.#accountService) throw new Error('AccountService not initialized')
+
+    return this.#accountService.createWithdrawalSecrets(commitment)
+  }
+
+  public getContext(withdrawal: Withdrawal, scope: Hash) {
+    if (!this.#sdkModule) throw new Error('SDK module not loaded')
+
+    const { calculateContext } = this.#sdkModule
+    return calculateContext(withdrawal, scope)
+  }
+
+  public getMerkleProof(leaves: bigint[], leaf: bigint) {
+    if (!this.#sdkModule) throw new Error('SDK module not loaded')
+
+    const { generateMerkleProof } = this.#sdkModule
+    return generateMerkleProof(leaves, leaf)
+  }
+
+  public async getPoolAccountsFromAccount(chainId: number) {
+    if (!this.#accountService) {
+      throw new Error('AccountService not initialized')
+    }
+    return { poolAccounts: [], poolAccountsByChainScope: {} as Record<string, PoolAccount[]> } // placeholder
+  }
+
+  private assertSdkInitialized() {
+    if (!this.#isInitialized || !this.#sdk || !this.#dataService || !this.#sdkModule) {
+      throw new Error('SDK not initialized. Call initSDK() in a window context first.')
+    }
+  }
+
+  get isInitialized(): boolean {
+    return this.#isInitialized
+  }
+
+  get initializationError(): string | null {
+    return this.#initializationError
+  }
+
+  get initialPromiseLoaded(): boolean {
+    return this.#initialPromiseLoaded
+  }
+
+  toJSON() {
+    return {
+      ...this,
+      ...super.toJSON(),
+      isInitialized: this.isInitialized,
+      initialPromiseLoaded: this.initialPromiseLoaded
+    }
+  }
 }

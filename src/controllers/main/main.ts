@@ -352,6 +352,7 @@ export class MainController extends EventEmitter {
         await this.setContractsDeployedToTrueIfDeployed(network)
       }
     )
+
     this.swapAndBridge = new SwapAndBridgeController({
       accounts: this.accounts,
       keystore: this.keystore,
@@ -400,9 +401,6 @@ export class MainController extends EventEmitter {
       this.providers,
       relayerUrl
     )
-
-    // this.privacy = new PrivacyController()
-
     this.domains = new DomainsController(
       this.providers.providers,
       this.networks.defaultNetworksMode
@@ -457,6 +455,8 @@ export class MainController extends EventEmitter {
         )
       }
     })
+
+    this.privacy = new PrivacyController(this.keystore)
   }
 
   /**
