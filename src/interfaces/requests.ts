@@ -44,12 +44,7 @@ export type BuildRequest =
       type: 'privateDepositRequest'
       params: {
         actionExecutionType: ActionExecutionType
-        windowId?: number
-
-        // temporary random values
-        amount: string
-        recipientAddress: string
-        selectedToken: TokenResult
+        txList: { to: string; value: bigint; data: string }[]
       }
     }
   | {
