@@ -9,7 +9,6 @@
 		"lib": ["ESNext", "DOM"],
 		"types": ["node", "jest", "mocha"],
 		"target": "ESNext",
-		"module": "ES2020",
 		"moduleResolution": "node",
 		"allowSyntheticDefaultImports": true,
 		"skipLibCheck": true,
