@@ -41,6 +41,15 @@ export type BuildRequest =
       }
     }
   | {
+    type: 'intentRequest'
+    params: {
+      amount: string
+      recipientAddress: string
+      selectedToken: TokenResult
+      actionExecutionType: ActionExecutionType
+    }
+  }
+  | {
       type: 'privateDepositRequest'
       params: {
         actionExecutionType: ActionExecutionType

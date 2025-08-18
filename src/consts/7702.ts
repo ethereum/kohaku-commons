@@ -19,6 +19,10 @@ export const networks7702: Custom7702Settings = {
   // gnosis
   '100': {
     implementation: EIP_7702_AMBIRE_ACCOUNT
+  },
+  // katana, they don't have the singleton
+  '747474': {
+    implementation: '0x8226995E02C70293595E0634C5F89547EDb08126'
   }
 }
 

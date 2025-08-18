@@ -72,7 +72,7 @@ export async function estimateWithRetries<T>(
   if (error) {
     if (error.cause === 'ConnectivityError') {
       errorCallback({
-        level: 'major',
+        level: 'expected',
         message: 'Estimating the transaction failed because of a network error.',
         error
       })

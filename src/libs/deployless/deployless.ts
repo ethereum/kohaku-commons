@@ -87,11 +87,16 @@ export class Deployless {
       !abi.includes((x: any) => x.type === 'constructor'),
       'contract cannot have a constructor, as it is not supported in state override mode'
     )
+    assert.ok(!!provider, 'provider must be provided')
     this.contractBytecode = code
     this.provider = provider
-    // eslint-disable-next-line no-underscore-dangle
-    this.isProviderInvictus = (provider as any)._getConnection().url.includes('invictus')
     this.iface = new Interface(abi)
+
+    if (provider && provider instanceof JsonRpcProvider) {
+      // eslint-disable-next-line no-underscore-dangle
+      this.isProviderInvictus = provider._getConnection().url.includes('invictus')
+    }
+
     if (codeAtRuntime !== undefined) {
       assert.ok(codeAtRuntime.startsWith('0x'), 'contract code (runtime) must start with 0x')
       this.stateOverrideSupported = true

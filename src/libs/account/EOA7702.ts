@@ -39,7 +39,11 @@ export class EOA7702 extends BaseAccount {
   getEstimationCriticalError(estimation: FullEstimation, op: AccountOp): Error | null {
     // the critical error should be from the provider if we can broadcast in EOA only mode
     if (!this.accountState.isSmarterEoa && op.calls.length === 1) {
-      return estimation.provider instanceof Error ? estimation.provider : null
+      if (estimation.provider instanceof Error) {
+        return estimation.ambire instanceof Error ? estimation.ambire : estimation.provider
+      }
+
+      return null
     }
 
     if (estimation.ambire instanceof Error) return estimation.ambire
@@ -106,9 +110,13 @@ export class EOA7702 extends BaseAccount {
         return estimation.ambireEstimation ? estimation.ambireEstimation.gasUsed + revokeGas : 0n
       }
 
-      // txn type 4 from here: not smarter with a batch, we need the bundler
-      if (!estimation.bundlerEstimation) return 0n
-      return BigInt(estimation.bundlerEstimation.callGasLimit) + this.ACTIVATOR_GAS_USED
+      // txn type 4
+      // play it safe and use the bundler estimation if any
+      if (estimation.bundlerEstimation)
+        return BigInt(estimation.bundlerEstimation.callGasLimit) + this.ACTIVATOR_GAS_USED
+
+      if (!estimation.ambireEstimation) return 0n
+      return BigInt(estimation.ambireEstimation.gasUsed) + this.ACTIVATOR_GAS_USED
     }
 
     // if we're paying in tokens, we're using the bundler
@@ -140,6 +148,9 @@ export class EOA7702 extends BaseAccount {
 
       // if already smart, executeBySender() on itself
       if (this.accountState.isSmarterEoa) return BROADCAST_OPTIONS.bySelf7702
+
+      // calls are more than 0 and it's not smart, delegation time
+      return BROADCAST_OPTIONS.delegation
     }
 
     // txn type 4 OR paying in token

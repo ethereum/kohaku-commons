@@ -109,7 +109,8 @@ const accountsCtrl = new AccountsController(
 )
 const selectedAccountCtrl = new SelectedAccountController({
   storage: storageCtrl,
-  accounts: accountsCtrl
+  accounts: accountsCtrl,
+  keystore
 })
 
 const actionsCtrl = new ActionsController({

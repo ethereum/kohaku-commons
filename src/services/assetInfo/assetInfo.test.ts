@@ -42,10 +42,10 @@ describe('Asset info service', () => {
       assetInfo.resolveAssetInfo(UNISWAP_ROUTER, networks[0], uniswapCallback),
       assetInfo.resolveAssetInfo(LOBSTER_ADDRESS, networks[0], lobsterCallback)
     ])
-    expect(wethCallback).toBeCalledTimes(1)
-    expect(usdcCallback).toBeCalledTimes(1)
-    expect(lobsterCallback).toBeCalledTimes(1)
-    expect(uniswapCallback).toBeCalledTimes(1)
+    expect(wethCallback).toHaveBeenCalledTimes(1)
+    expect(usdcCallback).toHaveBeenCalledTimes(1)
+    expect(lobsterCallback).toHaveBeenCalledTimes(1)
+    expect(uniswapCallback).toHaveBeenCalledTimes(1)
   })
 
   test('Batches', async () => {

@@ -839,7 +839,7 @@ export class AccountPickerController extends EventEmitter {
           level: 'major',
           message:
             'Error when adding accounts on the Ambire Relayer. Please try again later or contact support if the problem persists.',
-          error: new Error(e?.message)
+          error: e
         })
 
         this.addAccountsStatus = 'INITIAL'

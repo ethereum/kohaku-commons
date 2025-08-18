@@ -1,7 +1,11 @@
 export interface FeatureFlags {
-  [key: string]: boolean
+  withTransactionManagerController: boolean
+  withEmailVaultController: boolean
+  testnetMode: boolean
 }
 
-export const featureFlags: FeatureFlags = {
-  // None yet!
+export const defaultFeatureFlags: FeatureFlags = {
+  withTransactionManagerController: false,
+  withEmailVaultController: true,
+  testnetMode: false
 }

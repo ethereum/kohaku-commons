@@ -484,6 +484,12 @@ export function calculateSelectedAccountPortfolioByNetworks(
       newAccountPortfolioWithDefiPositions[network] =
         pastAccountPortfolioWithDefiPositionsNetworkState
 
+      if (!hasTokensWithAmount) {
+        hasTokensWithAmount = pastAccountPortfolioWithDefiPositionsNetworkState.tokens.some(
+          ({ amount }) => amount > 0n
+        )
+      }
+
       return
     }
 

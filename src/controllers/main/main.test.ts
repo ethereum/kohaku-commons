@@ -80,6 +80,7 @@ describe('Main Controller ', () => {
       storageAPI: storage,
       fetch,
       relayerUrl,
+      featureFlags: {},
       swapApiKey,
       keystoreSigners: { internal: KeystoreSigner },
       externalSignerControllers: {},
@@ -123,13 +124,17 @@ describe('Main Controller ', () => {
     // console.log(
     //   JSON.stringify(controller.emailVault.emailVaultStates[email].availableSecrets, null, 2)
     // )
-    controller.emailVault.uploadKeyStoreSecret(email)
+    controller.emailVault?.uploadKeyStoreSecret(email)
     // eslint-disable-next-line no-promise-executor-return
     await new Promise((resolve) => {
-      const unsubscribe = controller.emailVault.onUpdate(() => {
-        unsubscribe()
+      if (controller.emailVault) {
+        const unsubscribe = controller.emailVault.onUpdate(() => {
+          unsubscribe()
+          resolve(null)
+        })
+      } else {
         resolve(null)
-      })
+      }
     })
     // console.log(JSON.stringify(controller.emailVault, null, 2))
   })
@@ -156,6 +161,7 @@ describe('Main Controller ', () => {
       storageAPI: storage,
       fetch,
       relayerUrl,
+      featureFlags: {},
       swapApiKey,
       windowManager,
       notificationManager,
@@ -199,6 +205,7 @@ describe('Main Controller ', () => {
       storageAPI: storage,
       fetch,
       relayerUrl,
+      featureFlags: {},
       swapApiKey,
       windowManager,
       notificationManager,

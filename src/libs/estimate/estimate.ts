@@ -6,7 +6,6 @@ import { RPCProvider } from '../../interfaces/provider'
 import { BundlerSwitcher } from '../../services/bundlers/bundlerSwitcher'
 import { AccountOp } from '../accountOp/accountOp'
 import { TokenResult } from '../portfolio'
-import { UserOperation } from '../userOperation/types'
 import { ambireEstimateGas } from './ambireEstimation'
 import { bundlerEstimate } from './estimateBundler'
 import { estimateWithRetries } from './estimateWithRetries'
@@ -31,8 +30,7 @@ export async function getEstimation(
   feeTokens: TokenResult[],
   nativeToCheck: string[],
   switcher: BundlerSwitcher,
-  errorCallback: Function,
-  activityUserOp?: UserOperation
+  errorCallback: Function
 ): Promise<FullEstimation | Error> {
   const ambireEstimation = ambireEstimateGas(
     baseAcc,
@@ -52,8 +50,7 @@ export async function getEstimation(
     provider,
     switcher,
     errorCallback,
-    undefined,
-    activityUserOp
+    undefined
   )
   const providerEstimation = providerEstimateGas(
     baseAcc.getAccount(),

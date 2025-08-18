@@ -55,6 +55,8 @@ export class StorageController extends EventEmitter {
       await this.#clearHumanizerMetaObjectFromStorage() // As of version v4.34.0
       await this.#migrateTokenPreferences() // As of version 4.51.0
       await this.#migrateCashbackStatusToNewFormat() // As of version 4.53.0
+      await this.#removeIsDefaultWalletStorageIfExist() // As of version 4.57.0
+      await this.#removeOnboardingStateStorageIfExist() // As of version 4.59.0
       await this.#migrateNetworkIdToChainId()
     } catch (error) {
       console.error('Storage migration error: ', error)
@@ -443,6 +445,24 @@ export class StorageController extends EventEmitter {
       this.#storage.set('accountsOps', migratedAccountsOps),
       this.#storage.set('signedMessages', migratedSignedMessages)
     ])
+  }
+
+  // As of version 4.57.0, we the Ambire wallet is always the default wallet, so we no longer need 'isDefaultWallet' in the storage.
+  async #removeIsDefaultWalletStorageIfExist() {
+    const isDefaultWalletStorageSet = await this.#storage.get('isDefaultWallet', undefined)
+
+    if (isDefaultWalletStorageSet !== undefined) {
+      await this.#storage.remove('isDefaultWallet')
+    }
+  }
+
+  // As of version 4.59.0. the onboarding flow (stories) has been removed, we no longer need 'onboardingState' in the storage.
+  async #removeOnboardingStateStorageIfExist() {
+    const isOnboardingStateExists = await this.#storage.get('onboardingState', undefined)
+
+    if (isOnboardingStateExists !== undefined) {
+      await this.#storage.remove('onboardingState')
+    }
   }
 
   async get<K extends keyof StorageProps | string | undefined>(

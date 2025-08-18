@@ -1,5 +1,5 @@
 // eslint-disable-next-line import/no-cycle
-import { AccountOpAction, Action } from '../../controllers/actions/actions'
+import { AccountOpAction, Action, DappRequestAction } from '../../controllers/actions/actions'
 import { DappProviderRequest } from '../../interfaces/dapp'
 
 export const dappRequestMethodToActionKind = (method: DappProviderRequest['method']) => {
@@ -66,3 +66,7 @@ export const messageOnNewAction = (action: Action, addType: 'queued' | 'updated'
 
   return null
 }
+
+/** Type guard helper to check if an action is a DappRequestAction */
+export const isDappRequestAction = (action?: Action | null): action is DappRequestAction =>
+  action?.type === 'dappRequest'

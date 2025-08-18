@@ -10,7 +10,7 @@ import {
   SwitchAccountAction
 } from '../../interfaces/actions'
 import { NotificationManager } from '../../interfaces/notification'
-import { WindowManager, WindowProps } from '../../interfaces/window'
+import { FocusWindowParams, WindowManager, WindowProps } from '../../interfaces/window'
 // eslint-disable-next-line import/no-cycle
 import { messageOnNewAction } from '../../libs/actions/actions'
 import { getDappActionRequestsBanners } from '../../libs/banners/banners'
@@ -340,7 +340,7 @@ export class ActionsController extends EventEmitter {
     }
   }
 
-  async focusActionWindow() {
+  async focusActionWindow(params?: FocusWindowParams) {
     await this.#awaitPendingPromises()
 
     if (!this.visibleActionsQueue.length || !this.currentAction || !this.actionWindow.windowProps)
@@ -349,7 +349,7 @@ export class ActionsController extends EventEmitter {
     try {
       await this.#windowManager.remove('popup')
       this.actionWindow.focusWindowPromise = this.#windowManager
-        .focus(this.actionWindow.windowProps)
+        .focus(this.actionWindow.windowProps, params)
         .finally(() => {
           this.actionWindow.focusWindowPromise = undefined
         })

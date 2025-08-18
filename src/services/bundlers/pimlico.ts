@@ -27,4 +27,8 @@ export class Pimlico extends Bundler {
   public getName(): BUNDLER {
     return PIMLICO
   }
+
+  public shouldReestimateBeforeBroadcast(): boolean {
+    return false
+  }
 }

@@ -8,11 +8,13 @@ import {
   Network,
   NetworkFeature,
   NetworkInfo,
-  NetworkInfoLoading
+  NetworkInfoLoading,
+  RelayerNetwork
 } from '../../interfaces/network'
 import { RPCProviders } from '../../interfaces/provider'
 import { Bundler } from '../../services/bundlers/bundler'
 import { getRpcProvider } from '../../services/provider'
+import { mapRelayerNetworkConfigToAmbireNetwork } from '../../utils/networks'
 import { getSASupport } from '../deployless/simulateDeployCall'
 
 // bnb, gnosis, fantom, metis
@@ -403,8 +405,103 @@ export function getValidNetworks(networksInStorage: { [key: string]: Network }):
       // Attempt to replace broken network with predefined version, if available
       const predefinedNetwork = predefinedNetworks.find((n) => n.chainId === network.chainId)
       if (predefinedNetwork) validNetworks[network.chainId.toString()] = predefinedNetwork
+      else {
+        console.error(`Invalid network found in storage for chainId ${network.chainId}`, network)
+      }
     }
   })
 
   return validNetworks
+}
+
+/**
+ * Updates the currently stored networks with the networks coming from the relayer.
+ * To determine which networks to update, it compares the predefinedConfigVersion of the stored network
+ * with the relayer network. If no network is found in the storage, it adds the relayer network as a new one.
+ * Even if the predefinedConfigVersion is the same or lower, some properties of the stored network should be updated.
+ */
+export const getNetworksUpdatedWithRelayerNetworks = (
+  currentNetworks: { [key: string]: Network },
+  relayerNetworks: { [key: string]: RelayerNetwork }
+): { mergedNetworks: { [key: string]: Network }; updatedNetworkChainIds: Network['chainId'][] } => {
+  const networks = structuredClone(currentNetworks)
+  // New networks and networks with updated RPC providers
+  const updatedNetworkChainIds: Network['chainId'][] = []
+
+  Object.entries(relayerNetworks).forEach(([_chainId, network]) => {
+    const chainId = BigInt(_chainId)
+    const relayerNetwork = mapRelayerNetworkConfigToAmbireNetwork(chainId, network)
+    const currentNetwork = networks[chainId.toString()]
+
+    if (!currentNetwork) {
+      updatedNetworkChainIds.push(relayerNetwork.chainId)
+      networks[chainId.toString()] = {
+        ...(predefinedNetworks.find((n) => n.chainId === relayerNetwork.chainId) || {}),
+        ...relayerNetwork,
+        disabled: !!relayerNetwork.disabledByDefault
+      }
+      return
+    }
+
+    // If the network is custom we assume predefinedConfigVersion = 0
+    if (currentNetwork.predefinedConfigVersion === undefined) {
+      currentNetwork.predefinedConfigVersion = 0
+    }
+
+    // Mechanism to force an update network preferences if needed
+    const shouldOverrideStoredNetwork =
+      relayerNetwork.predefinedConfigVersion > 0 &&
+      relayerNetwork.predefinedConfigVersion > currentNetwork.predefinedConfigVersion
+
+    if (shouldOverrideStoredNetwork) {
+      updatedNetworkChainIds.push(relayerNetwork.chainId)
+      networks[chainId.toString()] = {
+        ...currentNetwork,
+        ...relayerNetwork,
+        rpcUrls: [...new Set([...relayerNetwork.rpcUrls, ...currentNetwork.rpcUrls])]
+      }
+      // update the selectedRpcUrl on disabledByDefault networks as we can
+      // determine better which RPC is the best for our custom networks
+      if (relayerNetwork.disabledByDefault)
+        networks[chainId.toString()].selectedRpcUrl = relayerNetwork.selectedRpcUrl
+    } else {
+      // No need to add this network to the updated list
+      // as the selectedRpcUrl is not changed and the network is
+      // already in the extension
+      networks[chainId.toString()] = {
+        ...currentNetwork,
+        rpcUrls: [...new Set([...relayerNetwork.rpcUrls, ...currentNetwork.rpcUrls])],
+        iconUrls: relayerNetwork.iconUrls,
+        predefined: relayerNetwork.predefined
+      }
+    }
+  })
+
+  // Step 3: Ensure predefined networks are marked correctly and handle special cases
+  let predefinedChainIds = Object.keys(relayerNetworks)
+
+  if (!predefinedChainIds.length) {
+    predefinedChainIds = predefinedNetworks.map((network) => network.chainId.toString())
+  }
+
+  Object.keys(networks).forEach((chainId: string) => {
+    // Remove unnecessary properties:
+    if ('disabledByDefault' in networks[chainId]) {
+      delete networks[chainId].disabledByDefault
+    }
+
+    const network = networks[chainId]
+
+    // If a predefined network is removed by the relayer, mark it as custom
+    // and remove the predefined flag
+    // Update the hasRelayer flag to false just in case
+    if (!predefinedChainIds.includes(network.chainId.toString()) && network.predefined) {
+      networks[chainId] = { ...network, predefined: false, hasRelayer: false }
+    }
+  })
+
+  return {
+    mergedNetworks: networks,
+    updatedNetworkChainIds
+  }
 }

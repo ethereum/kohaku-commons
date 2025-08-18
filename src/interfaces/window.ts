@@ -12,6 +12,14 @@ export type WindowProps = {
   createdFromWindowId?: number
 } | null
 
+export type FocusWindowParams = {
+  /**
+   * In some cases, the passed window cannot be focused (e.g., on Arc browser). If the window cannot be focused
+   * within 1 second, a new window is created and the old one is removed.
+   */
+  reopenIfNeeded?: boolean
+}
+
 export interface WindowManager {
   event: EventEmitter
   open: (options?: {
@@ -19,7 +27,7 @@ export interface WindowManager {
     customSize?: { width: number; height: number }
     baseWindowId?: number
   }) => Promise<WindowProps>
-  focus: (windowProps: WindowProps) => Promise<WindowProps>
+  focus: (windowProps: WindowProps, params?: FocusWindowParams) => Promise<WindowProps>
   closePopupWithUrl: (url: string) => Promise<void>
   remove: (winId: WindowId | 'popup') => Promise<void>
   sendWindowToastMessage: (

@@ -177,7 +177,8 @@ describe('Actions Controller', () => {
     )
     selectedAccountCtrl = new SelectedAccountController({
       storage: storageCtrl,
-      accounts: accountsCtrl
+      accounts: accountsCtrl,
+      keystore: new KeystoreController('default', storageCtrl, {}, windowManager)
     })
     await accountsCtrl.initialLoadPromise
     await networksCtrl.initialLoadPromise

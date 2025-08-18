@@ -208,7 +208,8 @@ const accountsCtrl = new AccountsController(
 
 const selectedAccountCtrl = new SelectedAccountController({
   storage: storageCtrl,
-  accounts: accountsCtrl
+  accounts: accountsCtrl,
+  keystore: keystoreController
 })
 
 const addressBookController = new AddressBookController(

@@ -10,6 +10,7 @@ import { networks } from '../../consts/networks'
 import { Storage } from '../../interfaces/storage'
 import { DeFiPositionsError } from '../../libs/defiPositions/types'
 import { KeystoreSigner } from '../../libs/keystoreSigner/keystoreSigner'
+import { PortfolioGasTankResult } from '../../libs/portfolio/interfaces'
 import { getRpcProvider } from '../../services/provider'
 import { AccountsController } from '../accounts/accounts'
 import { BannerController } from '../banner/banner'
@@ -67,7 +68,8 @@ const accountsCtrl = new AccountsController(
 
 const selectedAccountCtrl = new SelectedAccountController({
   storage: storageCtrl,
-  accounts: accountsCtrl
+  accounts: accountsCtrl,
+  keystore
 })
 
 const portfolioCtrl = new PortfolioController(
@@ -95,7 +97,7 @@ const defiPositionsCtrl = new DefiPositionsController({
 const accounts = [
   {
     addr: '0x77777777789A8BBEE6C64381e5E89E501fb0e4c8',
-    associatedKeys: [],
+    associatedKeys: ['0x77777777789A8BBEE6C64381e5E89E501fb0e4c8'],
     initialPrivileges: [],
     creation: {
       factoryAddr: '0xBf07a0Df119Ca234634588fbDb5625594E2a5BCA',
@@ -186,6 +188,10 @@ describe('SelectedAccount Controller', () => {
 
   describe('Banners', () => {
     const accountAddr = accounts[0].addr
+    beforeEach(() => {
+      jest.clearAllMocks()
+      jest.restoreAllMocks()
+    })
 
     it("An RPC banner is displayed when it's not working and the user has assets on it", async () => {
       await portfolioCtrl.updateSelectedAccount(accountAddr)
@@ -209,16 +215,21 @@ describe('SelectedAccount Controller', () => {
       ).toBeDefined()
       providersCtrl.updateProviderIsWorking(1n, true)
     })
-    it("No RPC banner is displayed when an RPC isn't working and the user has no assets on it", async () => {
+    it("No RPC/portfolio banner is displayed when an RPC isn't working and the user has no assets on it", async () => {
       await portfolioCtrl.updateSelectedAccount(accountAddr)
       jest
         .spyOn(portfolioCtrl, 'getNetworksWithAssets')
         .mockImplementation(() => ({ '137': true, '1': false }))
+      selectedAccountCtrl.portfolio.latest['1']!.criticalError = new Error('Mock error')
+      selectedAccountCtrl.portfolio.latest['1']!.result!.lastSuccessfulUpdate = 0
       providersCtrl.updateProviderIsWorking(1n, false)
       await waitNextControllerUpdate(selectedAccountCtrl)
 
       expect(
         selectedAccountCtrl.balanceAffectingErrors.find(({ id }) => id === 'rpcs-down')
+      ).toBeUndefined()
+      expect(
+        selectedAccountCtrl.balanceAffectingErrors.find(({ id }) => id === 'portfolio-critical')
       ).toBeUndefined()
       providersCtrl.updateProviderIsWorking(1n, true)
     })
@@ -329,7 +340,7 @@ describe('SelectedAccount Controller', () => {
 
       expect(selectedAccountCtrl.balanceAffectingErrors.length).toBe(0)
     })
-    it.skip("Defi error banner is displayed when there is a critical error and we don't know if the user has positions or not", async () => {
+    it("Defi error banner is displayed when there is a critical error and we don't know if the user has positions or not", async () => {
       selectedAccountCtrl.defiPositions = []
       // Bypass the `updatePositions` cache by setting `maxDataAgeMs` to 0.
       // Otherwise, no update is emitted and the test cannot proceed.
@@ -356,5 +367,20 @@ describe('SelectedAccount Controller', () => {
 
       expect(selectedAccountCtrl.balanceAffectingErrors.length).toBe(1)
     })
+  })
+  test("Cashback status is not updated for the account because it's view-only", async () => {
+    ;(
+      selectedAccountCtrl.portfolio.latest.gasTank!.result as PortfolioGasTankResult
+    ).gasTankTokens[0].cashback = 0n
+    // Mocks 'no-cashback'
+    await selectedAccountCtrl.updateCashbackStatus()
+    ;(
+      selectedAccountCtrl.portfolio.latest.gasTank!.result as PortfolioGasTankResult
+    ).gasTankTokens[0].cashback = 10n
+    // Mocks 'unseen-cashback'
+    await selectedAccountCtrl.updateCashbackStatus()
+
+    // Cashback is undefined because the account is view-only
+    expect(selectedAccountCtrl.cashbackStatus).toBeUndefined()
   })
 })
