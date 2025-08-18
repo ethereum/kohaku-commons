@@ -108,14 +108,15 @@ const prepareTest = async () => {
     () => {}
   )
 
+  const keystoreCtrl = new KeystoreController('default', storageCtrl, {}, windowManager)
+
   const selectedAccountCtrl = new SelectedAccountController({
     storage: storageCtrl,
-    accounts: accountsCtrl
+    accounts: accountsCtrl,
+    keystore: keystoreCtrl
   })
 
   const dappsCtrl = new DappsController(storageCtrl)
-
-  const keystoreCtrl = new KeystoreController('default', storageCtrl, {}, windowManager)
 
   const addressBookCtrl = new AddressBookController(storageCtrl, accountsCtrl, selectedAccountCtrl)
   const portfolioCtrl = new PortfolioController(

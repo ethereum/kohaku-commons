@@ -2,6 +2,7 @@
 import { BUNDLER } from '../../consts/bundlers'
 import { Network } from '../../interfaces/network'
 import { RPCProvider } from '../../interfaces/provider'
+import { BaseAccount } from '../../libs/account/BaseAccount'
 import { decodeError } from '../../libs/errorDecoder'
 import { ErrorType } from '../../libs/errorDecoder/types'
 import { GasRecommendation, getGasPriceRecommendations } from '../../libs/gasPrice/gasPrice'
@@ -16,6 +17,8 @@ export class GasPriceController extends EventEmitter {
   #network: Network
 
   #provider: RPCProvider
+
+  #baseAccount: BaseAccount
 
   #bundlerSwitcher: BundlerSwitcher
 
@@ -38,6 +41,7 @@ export class GasPriceController extends EventEmitter {
   constructor(
     network: Network,
     provider: RPCProvider,
+    baseAccount: BaseAccount,
     bundlerSwitcher: BundlerSwitcher,
     getSignAccountOpState: () => {
       estimation: EstimationController
@@ -48,6 +52,7 @@ export class GasPriceController extends EventEmitter {
     super()
     this.#network = network
     this.#provider = provider
+    this.#baseAccount = baseAccount
     this.#bundlerSwitcher = bundlerSwitcher
     this.#getSignAccountOpState = getSignAccountOpState
   }
@@ -96,18 +101,28 @@ export class GasPriceController extends EventEmitter {
         })
         return null
       }),
-      this.#network.erc4337.hasBundlerSupport !== false
-        ? bundler
-            // no error emits here as most of the time estimation/signing
-            // will work even if this fails
-            .fetchGasPrices(this.#network, () => {})
-            .catch((e) => {
-              this.emitError({
-                level: 'silent',
-                message: "Failed to fetch the bundler's gas price",
-                error: e
-              })
+      // if the account cannot broadcast on the given network using the 4337 model,
+      // we ask for gas prices from the bundler as bundler gas prices tend to be
+      // generally better than our own
+      //
+      // If it can broadcast using 4337, then bundler gas prices will be pulled and
+      // updated in signAccountOp during bundlerEstimate() in estimateBundler.ts
+      !this.#baseAccount.supportsBundlerEstimation()
+        ? Promise.race([
+            bundler.fetchGasPrices(this.#network, () => {}),
+            new Promise((_resolve, reject) => {
+              setTimeout(
+                () => reject(new Error('bundler gas price fetch fail, request too slow')),
+                4000
+              )
             })
+          ]).catch(() => {
+            // eslint-disable-next-line no-console
+            console.error(
+              `fetchGasPrices for ${bundler.getName()} failed, fallbacking to getGasPriceRecommendations`
+            )
+            return null
+          })
         : null
     ])
 
@@ -118,7 +133,7 @@ export class GasPriceController extends EventEmitter {
     }
     if (bundlerGas)
       this.bundlerGasPrices[this.#network.chainId.toString()] = {
-        speeds: bundlerGas,
+        speeds: bundlerGas as GasSpeeds,
         bundler: bundler.getName()
       }
 

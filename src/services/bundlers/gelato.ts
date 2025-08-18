@@ -59,4 +59,8 @@ export class Gelato extends Bundler {
   public getName(): BUNDLER {
     return GELATO
   }
+
+  public shouldReestimateBeforeBroadcast(network: Network): boolean {
+    return !!network.isOptimistic
+  }
 }

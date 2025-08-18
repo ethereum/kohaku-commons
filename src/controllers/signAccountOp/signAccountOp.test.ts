@@ -16,6 +16,7 @@ import { EOA_SIMULATION_NONCE } from '../../consts/deployless'
 import { networks } from '../../consts/networks'
 import { Account } from '../../interfaces/account'
 import { Storage } from '../../interfaces/storage'
+import { getBaseAccount } from '../../libs/account/getBaseAccount'
 import { AccountOp, accountOpSignableHash } from '../../libs/accountOp/accountOp'
 import { BROADCAST_OPTIONS } from '../../libs/broadcast/broadcast'
 import { FullEstimationSummary } from '../../libs/estimate/interfaces'
@@ -456,7 +457,8 @@ const init = async (
   const callRelayer = relayerCall.bind({ url: '', fetch })
   const selectedAccountCtrl = new SelectedAccountController({
     storage: storageCtrl,
-    accounts: accountsCtrl
+    accounts: accountsCtrl,
+    keystore
   })
   const activity = new ActivityController(
     storageCtrl,
@@ -468,6 +470,12 @@ const init = async (
     networksCtrl,
     portfolio,
     () => Promise.resolve()
+  )
+  const baseAccount = getBaseAccount(
+    account,
+    accountsCtrl.accountStates[account.addr][network.chainId.toString()],
+    keystore.keys.filter((key) => account.associatedKeys.includes(key.addr)),
+    network
   )
   const estimationController = new EstimationController(
     keystore,
@@ -484,11 +492,17 @@ const init = async (
   estimationController.availableFeeOptions = estimationOrMock.ambireEstimation
     ? estimationOrMock.ambireEstimation.feePaymentOptions
     : estimationOrMock.providerEstimation!.feePaymentOptions
-  const gasPriceController = new GasPriceController(network, provider, bundlerSwitcher, () => ({
-    estimation: estimationController,
-    readyToSign: true,
-    isSignRequestStillActive: () => true
-  }))
+  const gasPriceController = new GasPriceController(
+    network,
+    provider,
+    baseAccount,
+    bundlerSwitcher,
+    () => ({
+      estimation: estimationController,
+      readyToSign: true,
+      isSignRequestStillActive: () => true
+    })
+  )
   gasPriceController.gasPrices = gasPricesOrMock
   const controller = new SignAccountOpTesterController(
     accountsCtrl,

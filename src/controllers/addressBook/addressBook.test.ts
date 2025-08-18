@@ -93,7 +93,8 @@ describe('AddressBookController', () => {
   )
   const selectedAccountCtrl = new SelectedAccountController({
     storage: storageCtrl,
-    accounts: accountsCtrl
+    accounts: accountsCtrl,
+    keystore: new KeystoreController('default', storageCtrl, {}, mockWindowManager().windowManager)
   })
   const addressBookController = new AddressBookController(
     storageCtrl,

@@ -22,10 +22,10 @@ describe('Generic error fallbacks work', () => {
     )
 
     expect(messageWithCode).toBe(
-      `${MESSAGE_PREFIX} of an unknown error (Origin: Rpc call). Error code: Unsupported method\nPlease try again or contact Ambire support for assistance.`
+      `${MESSAGE_PREFIX} of an unknown error (Origin: RPC call). Error code: Unsupported method\nPlease try again or contact Ambire support for assistance.`
     )
     expect(messageWithoutCode).toBe(
-      `${MESSAGE_PREFIX} of an unknown error (Origin: Rpc call).\nPlease try again or contact Ambire support for assistance.`
+      `${MESSAGE_PREFIX} of an unknown error (Origin: RPC call).\nPlease try again or contact Ambire support for assistance.`
     )
   })
   it('Relayer error', () => {

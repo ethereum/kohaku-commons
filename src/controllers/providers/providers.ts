@@ -31,7 +31,7 @@ export class ProvidersController extends EventEmitter {
 
   async #load() {
     await this.#networks.initialLoadPromise
-    this.#networks.networks.forEach((n) => this.setProvider(n))
+    this.#networks.allNetworks.forEach((n) => this.setProvider(n))
     this.emitUpdate()
   }
 

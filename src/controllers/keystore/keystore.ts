@@ -443,7 +443,7 @@ export class KeystoreController extends EventEmitter {
     if (!Mnemonic.isValidMnemonic(seed)) {
       throw new EmittableError({
         message: 'You are trying to store an invalid seed phrase.',
-        level: 'major',
+        level: 'expected',
         error: new Error('keystore: trying to add an invalid seed phrase')
       })
     }

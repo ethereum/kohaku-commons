@@ -78,7 +78,8 @@ const prepareTest = async () => {
 
   const selectedAccountCtrl = new SelectedAccountController({
     storage: storageCtrl,
-    accounts: accountsCtrl
+    accounts: accountsCtrl,
+    keystore: keystoreCtrl
   })
   await selectedAccountCtrl.initialLoadPromise
   await networksCtrl.initialLoadPromise

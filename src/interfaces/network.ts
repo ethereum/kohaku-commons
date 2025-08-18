@@ -137,6 +137,7 @@ export type RelayerNetwork = {
   predefinedConfigVersion: number
   ambireId: string
   platformId: string
+  chainId: number
   name: string
   iconUrls: string[]
   explorerUrl: string

@@ -43,7 +43,8 @@ import {
 import {
   buildClaimWalletRequest,
   buildMintVestingRequest,
-  buildTransferUserRequest
+  buildTransferUserRequest,
+  prepareIntentUserRequest
 } from '../../libs/transfer/userRequest'
 import { AccountsController } from '../accounts/accounts'
 // eslint-disable-next-line import/no-cycle
@@ -63,6 +64,7 @@ import { ProvidersController } from '../providers/providers'
 import { SelectedAccountController } from '../selectedAccount/selectedAccount'
 import { SignAccountOpController, SignAccountOpUpdateProps } from '../signAccountOp/signAccountOp'
 import { SwapAndBridgeController, SwapAndBridgeFormStatus } from '../swapAndBridge/swapAndBridge'
+import { TransactionManagerController } from '../transaction/transactionManager'
 import { TransferController } from '../transfer/transfer'
 
 const STATUS_WRAPPED_METHODS = {
@@ -92,6 +94,8 @@ export class RequestsController extends EventEmitter {
   #transfer: TransferController
 
   #swapAndBridge: SwapAndBridgeController
+
+  #transactionManager?: TransactionManagerController
 
   #getSignAccountOp: () => SignAccountOpController | null
 
@@ -126,6 +130,7 @@ export class RequestsController extends EventEmitter {
     dapps,
     transfer,
     swapAndBridge,
+    transactionManager,
     windowManager,
     notificationManager,
     getSignAccountOp,
@@ -144,6 +149,7 @@ export class RequestsController extends EventEmitter {
     dapps: DappsController
     transfer: TransferController
     swapAndBridge: SwapAndBridgeController
+    transactionManager?: TransactionManagerController
     windowManager: WindowManager
     notificationManager: NotificationManager
     getSignAccountOp: () => SignAccountOpController | null
@@ -164,6 +170,7 @@ export class RequestsController extends EventEmitter {
     this.#dapps = dapps
     this.#transfer = transfer
     this.#swapAndBridge = swapAndBridge
+    this.#transactionManager = transactionManager
 
     this.#getSignAccountOp = getSignAccountOp
     this.#updateSignAccountOp = updateSignAccountOp
@@ -529,6 +536,10 @@ export class RequestsController extends EventEmitter {
       await this.#buildMintVestingUserRequest(params)
     }
 
+    if (type === 'intentRequest') {
+      await this.#buildIntentUserRequest(params)
+    }
+
     if (type === 'privateDepositRequest') {
       await this.#buildPrivateDepositUserRequest(params)
     }
@@ -822,6 +833,61 @@ export class RequestsController extends EventEmitter {
     }
 
     await this.#addSwitchAccountUserRequest(userRequest)
+  }
+
+  async #buildIntentUserRequest({
+    amount,
+    recipientAddress,
+    selectedToken,
+    actionExecutionType = 'open-action-window'
+  }: {
+    amount: string
+    recipientAddress: string
+    selectedToken: TokenResult
+    actionExecutionType: ActionExecutionType
+  }) {
+    await this.initialLoadPromise
+    if (!this.#selectedAccount.account) return
+
+    if (!this.#transactionManager) {
+      this.emitError({
+        error: new Error('Error: TransactionManagerController feature is not enabled'),
+        message: 'This feature is currently disabled',
+        level: 'major'
+      })
+      return
+    }
+
+    const baseAcc = getBaseAccount(
+      this.#selectedAccount.account,
+      await this.#accounts.getOrFetchAccountOnChainState(
+        this.#selectedAccount.account.addr,
+        selectedToken.chainId
+      ),
+      this.#keystore.getAccountKeys(this.#selectedAccount.account),
+      this.#networks.networks.find((net) => net.chainId === selectedToken.chainId)!
+    )
+
+    const userRequests = prepareIntentUserRequest({
+      selectedAccount: this.#selectedAccount.account.addr,
+      selectedToken,
+      recipientAddress,
+      paymasterService: getAmbirePaymasterService(baseAcc, this.#relayerUrl),
+      transactions: this.#transactionManager.intent?.transactions
+    })
+
+    if (!userRequests.length) {
+      this.emitError({
+        level: 'major',
+        message: 'Unexpected error while building intent request',
+        error: new Error(
+          'buildUserRequestFromIntentRequest: bad parameters passed to buildIntentUserRequest'
+        )
+      })
+      return
+    }
+
+    await this.addUserRequests(userRequests, { actionExecutionType, actionPosition: 'last' })
   }
 
   async #buildTransferUserRequest({

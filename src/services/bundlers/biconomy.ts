@@ -85,4 +85,8 @@ export class Biconomy extends Bundler {
   public getName(): BUNDLER {
     return BICONOMY
   }
+
+  public shouldReestimateBeforeBroadcast(): boolean {
+    return false
+  }
 }

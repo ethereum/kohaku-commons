@@ -1,5 +1,7 @@
 import { Account, AccountId } from '../../interfaces/account'
 import { Fetch } from '../../interfaces/fetch'
+import { Network } from '../../interfaces/network'
+import { RPCProvider } from '../../interfaces/provider'
 import { getBaseAccount } from '../../libs/account/getBaseAccount'
 import { getAssetValue } from '../../libs/defiPositions/helpers'
 import { getAAVEPositions, getUniV3Positions } from '../../libs/defiPositions/providers'
@@ -87,10 +89,15 @@ export class DefiPositionsController extends EventEmitter {
     })
   }
 
-  #getShouldSkipUpdate(accountAddr: string, maxDataAgeMs = ONE_MINUTE, forceUpdate?: boolean) {
+  #getShouldSkipUpdate(
+    accountAddr: string,
+    _maxDataAgeMs = ONE_MINUTE,
+    forceUpdate: boolean = false
+  ) {
     const hasKeys = this.#keystore.keys.some(({ addr }) =>
       this.#selectedAccount.account!.associatedKeys.includes(addr)
     )
+    let maxDataAgeMs = _maxDataAgeMs
 
     // force update the positions if forceUpdate is passed,
     // the account has keys and a session with the DeFi tab is opened
@@ -170,12 +177,20 @@ export class DefiPositionsController extends EventEmitter {
 
     const lower = (s: string) => s.toLowerCase()
 
+    /**
+     * Fetches the defi positions of certain protocols using RPC calls and custom logic.
+     * Cena is used for most of the positions, but some protocols require additional data
+     * that is not available in Cena. This function fetches those positions on ENABLED
+     * networks only.
+     */
     const fetchCustomPositions = async (
       addr: string,
-      provider: any,
-      network: any,
+      provider: RPCProvider,
+      network: Network,
       previous: PositionsByProvider[]
     ): Promise<PositionsByProvider[]> => {
+      if (network.disabled) return []
+
       const [aave, uniV3] = await Promise.all([
         getAAVEPositions(addr, provider, network).catch((e: any) => {
           console.error('getAAVEPositions error:', e)
@@ -193,7 +208,7 @@ export class DefiPositionsController extends EventEmitter {
     }
 
     const updateSingleNetwork = async (
-      network: any,
+      network: Network,
       debankPositionsByProvider: PositionsByProvider[]
     ) => {
       const chain = network.chainId.toString()

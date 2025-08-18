@@ -123,6 +123,15 @@ export async function getTxnData(
 ): Promise<{ to: Hex; value: bigint; data: Hex; gasLimit?: bigint }> {
   // no need to estimate gas for delegation, it's already estimated
   if (broadcastOption === BROADCAST_OPTIONS.delegation) {
+    if (op.calls.length > 1) {
+      const ambireAccount = new Interface(AmbireAccount.abi)
+      return {
+        to: account.addr as Hex,
+        value: 0n,
+        data: ambireAccount.encodeFunctionData('executeBySender', [getSignableCalls(op)]) as Hex
+      }
+    }
+
     if (!call) throw new Error('single txn broadcast misconfig')
     return {
       to: call.to as Hex,

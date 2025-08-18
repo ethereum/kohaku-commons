@@ -4,11 +4,25 @@ import wait from '../../utils/wait'
 const LIMIT_ON_THE_NUMBER_OF_ERRORS = 100
 
 export type ErrorRef = {
-  // user-friendly message, ideally containing call to action
+  /**
+   * User-friendly message, ideally containing call to action
+   */
   message: string
-  // error level, used for filtering
-  level: 'fatal' | 'major' | 'minor' | 'silent'
-  // error containing technical details and stack trace
+  /**
+   * Logged in the console - all
+   * Displayed as a banner - expected, major
+   * Reported to the error tracking service by default - all, except `expected`
+   */
+  level: 'expected' | 'minor' | 'silent' | 'major'
+
+  /**
+   * Whether the error be reported to the error tracking service (e.g. Sentry).
+   * The default value depends on the error level. See the `level` property for more info.
+   */
+  sendCrashReport?: boolean
+  /**
+   * The original error, containing technical details and stack trace
+   */
   error: Error
 }
 

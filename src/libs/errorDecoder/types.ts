@@ -16,7 +16,7 @@ export enum ErrorType {
   /** Custom contract errors */
   CustomError = 'CustomError',
   /** Error from an RPC call */
-  RpcError = 'RpcError',
+  RpcError = 'RPCError',
   /** Error that cannot be decoded */
   UnknownError = 'UnknownError',
   /** Error due to the user rejecting a transaction */

@@ -23,6 +23,10 @@ const getRpcProvider = (
     if (prefUrl) rpcUrl = prefUrl
   }
 
+  if (!rpcUrl) {
+    throw new Error('Invalid RPC URL provided')
+  }
+
   if (chainId) {
     const staticNetwork = Network.from(Number(chainId))
 
