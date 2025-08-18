@@ -41,11 +41,42 @@ export type BuildRequest =
       }
     }
   | {
-      type: 'intentRequest'
+    type: 'intentRequest'
+    params: {
+      amount: string
+      recipientAddress: string
+      selectedToken: TokenResult
+      actionExecutionType: ActionExecutionType
+    }
+  }
+  | {
+      type: 'privateDepositRequest'
       params: {
+        actionExecutionType: ActionExecutionType
+        txList: { to: string; value: bigint; data: string }[]
+      }
+    }
+  | {
+      type: 'privateSendRequest'
+      params: {
+        actionExecutionType: ActionExecutionType
+        windowId?: number
+
+        // temporary random values
         amount: string
         recipientAddress: string
         selectedToken: TokenResult
+      }
+    }
+  | {
+      type: 'privateRagequitRequest'
+      params: {
         actionExecutionType: ActionExecutionType
+        windowId?: number
+
+        // temporary random values
+        amount: string
+        recipientAddress: string
+        selectedToken: TokenResult
       }
     }

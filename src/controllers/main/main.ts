@@ -88,6 +88,7 @@ import { StorageController } from '../storage/storage'
 import { SwapAndBridgeController } from '../swapAndBridge/swapAndBridge'
 import { TransactionManagerController } from '../transaction/transactionManager'
 import { TransferController } from '../transfer/transfer'
+import { PrivacyController } from '../privacy/privacy'
 
 const STATUS_WRAPPED_METHODS = {
   removeAccount: 'INITIAL',
@@ -154,6 +155,8 @@ export class MainController extends EventEmitter {
   transactionManager?: TransactionManagerController
 
   transfer: TransferController
+
+  privacy: PrivacyController
 
   signAccountOp: SignAccountOpController | null = null
 
@@ -238,9 +241,7 @@ export class MainController extends EventEmitter {
     this.keystore = new KeystoreController(platform, this.storage, keystoreSigners, windowManager)
     this.#externalSignerControllers = externalSignerControllers
     this.networks = new NetworksController({
-      defaultNetworksMode: this.featureFlags.isFeatureEnabled('testnetMode')
-        ? 'testnet'
-        : 'mainnet',
+      defaultNetworksMode: 'testnet',
       storage: this.storage,
       fetch,
       relayerUrl,
@@ -365,6 +366,7 @@ export class MainController extends EventEmitter {
         await this.setContractsDeployedToTrueIfDeployed(network)
       }
     )
+
     this.swapAndBridge = new SwapAndBridgeController({
       accounts: this.accounts,
       keystore: this.keystore,
@@ -490,6 +492,8 @@ export class MainController extends EventEmitter {
         )
       }
     })
+
+    this.privacy = new PrivacyController(this.keystore)
   }
 
   /**
