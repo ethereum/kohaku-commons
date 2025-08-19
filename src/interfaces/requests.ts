@@ -41,14 +41,14 @@ export type BuildRequest =
       }
     }
   | {
-    type: 'intentRequest'
-    params: {
-      amount: string
-      recipientAddress: string
-      selectedToken: TokenResult
-      actionExecutionType: ActionExecutionType
+      type: 'intentRequest'
+      params: {
+        amount: string
+        recipientAddress: string
+        selectedToken: TokenResult
+        actionExecutionType: ActionExecutionType
+      }
     }
-  }
   | {
       type: 'privateDepositRequest'
       params: {
