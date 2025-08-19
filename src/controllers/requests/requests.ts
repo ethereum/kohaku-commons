@@ -541,22 +541,25 @@ export class RequestsController extends EventEmitter {
     }
 
     if (type === 'privateDepositRequest') {
-      await this.#buildPrivateDepositUserRequest(params)
+      await this.#buildPrivacyPoolsUserRequest(params)
     }
 
     if (type === 'privateSendRequest') {
-      await this.#buildPrivateSendUserRequest(params)
+      await this.#buildPrivacyPoolsUserRequest(params)
     }
 
     if (type === 'privateRagequitRequest') {
-      await this.#buildPrivateRagequitUserRequest(params)
+      await this.#buildPrivacyPoolsUserRequest(params)
     }
   }
 
-  async #buildPrivateDepositUserRequest({
+  async #buildPrivacyPoolsUserRequest({
     txList,
     actionExecutionType = 'open-action-window'
-  }: any) {
+  }: {
+    txList: { to: string; value: bigint; data: string }[]
+    actionExecutionType: ActionExecutionType
+  }) {
     await this.initialLoadPromise
     if (!this.#selectedAccount.account) return
 
