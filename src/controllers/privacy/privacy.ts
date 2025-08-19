@@ -97,6 +97,20 @@ export class PrivacyController extends EventEmitter {
     this.emitUpdate()
   }
 
+  public unloadScreen() {
+    this.resetForm()
+  }
+
+  public resetForm() {
+    this.amount = ''
+    this.seedPhrase = ''
+    this.targetAddress = ''
+    this.selectedToken = ''
+    this.#isInitialized = false
+
+    this.emitUpdate()
+  }
+
   get isInitialized(): boolean {
     return this.#isInitialized
   }
