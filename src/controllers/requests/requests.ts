@@ -2,7 +2,7 @@
 import { ethErrors } from 'eth-rpc-errors'
 import { getAddress, getBigInt } from 'ethers'
 
-import { buildSignUserRequest } from '../privacy/buildRequest'
+import { buildSignUserRequest } from '../privacyPools/buildRequest'
 import EmittableError from '../../classes/EmittableError'
 import { Session } from '../../classes/session'
 import SwapAndBridgeError from '../../classes/SwapAndBridgeError'
