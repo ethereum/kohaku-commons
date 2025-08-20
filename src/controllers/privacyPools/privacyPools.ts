@@ -3,7 +3,7 @@ import type { KeystoreController } from '../keystore/keystore'
 import { type ChainData, chainData, whitelistedChains } from './config'
 import EventEmitter from '../eventEmitter/eventEmitter'
 
-interface PrivacyFormUpdate {
+interface PrivacyPoolsFormUpdate {
   amount?: string
   seedPhrase?: string
   targetAddress?: string
@@ -18,7 +18,7 @@ type PoolInfo = {
   deploymentBlock: bigint
 }
 
-export class PrivacyController extends EventEmitter {
+export class PrivacyPoolsController extends EventEmitter {
   #keystore: KeystoreController | null = null
 
   #isInitialized: boolean = false
@@ -83,7 +83,7 @@ export class PrivacyController extends EventEmitter {
     this.emitUpdate()
   }
 
-  public update({ amount, seedPhrase, targetAddress }: PrivacyFormUpdate) {
+  public update({ amount, seedPhrase, targetAddress }: PrivacyPoolsFormUpdate) {
     if (amount) {
       this.amount = amount
     }

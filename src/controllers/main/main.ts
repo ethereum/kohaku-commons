@@ -88,7 +88,7 @@ import { StorageController } from '../storage/storage'
 import { SwapAndBridgeController } from '../swapAndBridge/swapAndBridge'
 import { TransactionManagerController } from '../transaction/transactionManager'
 import { TransferController } from '../transfer/transfer'
-import { PrivacyController } from '../privacy/privacy'
+import { PrivacyPoolsController } from '../privacyPools/privacyPools'
 
 const STATUS_WRAPPED_METHODS = {
   removeAccount: 'INITIAL',
@@ -156,7 +156,7 @@ export class MainController extends EventEmitter {
 
   transfer: TransferController
 
-  privacy: PrivacyController
+  privacyPools: PrivacyPoolsController
 
   signAccountOp: SignAccountOpController | null = null
 
@@ -493,7 +493,7 @@ export class MainController extends EventEmitter {
       }
     })
 
-    this.privacy = new PrivacyController(this.keystore)
+    this.privacyPools = new PrivacyPoolsController(this.keystore)
   }
 
   /**
