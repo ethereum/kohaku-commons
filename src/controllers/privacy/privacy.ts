@@ -1,8 +1,3 @@
-import {
-  type PoolAccount as SDKPoolAccount,
-  type AccountCommitment,
-  type RagequitEvent
-} from '@0xbow/privacy-pools-core-sdk'
 import type { Address, Hex } from 'viem'
 import type { KeystoreController } from '../keystore/keystore'
 import { type ChainData, chainData, whitelistedChains } from './config'
@@ -23,33 +18,8 @@ type PoolInfo = {
   deploymentBlock: bigint
 }
 
-type RagequitEventWithTimestamp = RagequitEvent & {
-  timestamp: bigint
-}
-
-type PoolAccount = SDKPoolAccount & {
-  name: number
-  balance: bigint
-  isValid: boolean
-  reviewStatus: ReviewStatus
-  lastCommitment: AccountCommitment
-  chainId: number
-  scope: Hash
-  ragequit?: RagequitEventWithTimestamp
-}
-
-export enum ReviewStatus {
-  PENDING = 'pending',
-  APPROVED = 'approved',
-  DECLINED = 'declined',
-  EXITED = 'exited',
-  SPENT = 'spent'
-}
-
 export class PrivacyController extends EventEmitter {
   #keystore: KeystoreController | null = null
-
-  #selectedPool: PoolInfo | null = null
 
   #isInitialized: boolean = false
 
@@ -66,10 +36,6 @@ export class PrivacyController extends EventEmitter {
   targetAddress: Address | string = ''
 
   selectedToken: string = ''
-
-  selectedPoolAccount: PoolAccount | null = null
-
-  poolAccounts: PoolAccount[] = [] // TODO: create a setter for this property
 
   poolsByChain: PoolInfo[] = []
 
@@ -127,6 +93,20 @@ export class PrivacyController extends EventEmitter {
     }
 
     this.seedPhrase = seedPhrase || ''
+
+    this.emitUpdate()
+  }
+
+  public unloadScreen() {
+    this.resetForm()
+  }
+
+  public resetForm() {
+    this.amount = ''
+    this.seedPhrase = ''
+    this.targetAddress = ''
+    this.selectedToken = ''
+    this.#isInitialized = false
 
     this.emitUpdate()
   }
