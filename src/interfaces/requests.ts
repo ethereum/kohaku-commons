@@ -60,23 +60,13 @@ export type BuildRequest =
       type: 'privateSendRequest'
       params: {
         actionExecutionType: ActionExecutionType
-        windowId?: number
-
-        // temporary random values
-        amount: string
-        recipientAddress: string
-        selectedToken: TokenResult
+        txList: { to: string; value: bigint; data: string }[]
       }
     }
   | {
       type: 'privateRagequitRequest'
       params: {
         actionExecutionType: ActionExecutionType
-        windowId?: number
-
-        // temporary random values
-        amount: string
-        recipientAddress: string
-        selectedToken: TokenResult
+        txList: { to: string; value: bigint; data: string }[]
       }
     }
