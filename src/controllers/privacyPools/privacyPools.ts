@@ -29,6 +29,10 @@ export class PrivacyPoolsController extends EventEmitter {
 
   #initialPromiseLoaded: boolean = false
 
+  #privacyPoolsAspUrl: string
+
+  #alchemyApiKey: string
+
   amount: string = ''
 
   seedPhrase: string = ''
@@ -45,10 +49,12 @@ export class PrivacyPoolsController extends EventEmitter {
 
   chainData: ChainData | null = null
 
-  constructor(keystore: KeystoreController) {
+  constructor(keystore: KeystoreController, privacyPoolsAspUrl: string, alchemyApiKey: string) {
     super()
 
     this.#keystore = keystore
+    this.#privacyPoolsAspUrl = privacyPoolsAspUrl
+    this.#alchemyApiKey = alchemyApiKey
     this.#initialPromise = this.#load()
 
     this.emitUpdate()
@@ -72,7 +78,16 @@ export class PrivacyPoolsController extends EventEmitter {
       }
     })
 
-    this.chainData = { ...chainData }
+    this.chainData = Object.fromEntries(
+      Object.entries(chainData).map(([chainId, chain]) => [
+        chainId,
+        {
+          ...chain,
+          aspUrl: this.#privacyPoolsAspUrl,
+          rpcUrl: `${chain.rpcUrl}${this.#alchemyApiKey}`
+        }
+      ])
+    )
     this.#initialPromiseLoaded = true
   }
 

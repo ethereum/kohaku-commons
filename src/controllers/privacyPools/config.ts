@@ -1,9 +1,5 @@
-import { type Address, type HttpTransport, http, parseEther } from 'viem'
+import { type Address, parseEther } from 'viem'
 import { type Chain, sepolia } from 'viem/chains'
-
-// TODO: Fix this later
-const ALCHEMY_KEY = '123545'
-const ASP_ENDPOINT = '123545'
 
 // Add chains to the whitelist to be used in the app
 const testnetChains: readonly [Chain, ...Chain[]] = [sepolia]
@@ -54,8 +50,8 @@ const testnetChainData: ChainData = {
     explorerUrl: sepolia.blockExplorers.default.url,
     // sdkRpcUrl: `/api/hypersync-rpc?chainId=11155111`, // Secure Hypersync proxy (relative URL)
     sdkRpcUrl: 'https://sepolia.rpc.hypersync.xyz',
-    rpcUrl: `https://eth-sepolia.g.alchemy.com/v2/${ALCHEMY_KEY}`,
-    aspUrl: ASP_ENDPOINT,
+    rpcUrl: 'https://eth-sepolia.g.alchemy.com/v2/',
+    aspUrl: '',
     relayers: [
       { name: 'Testnet Relay', url: 'https://testnet-relayer.privacypools.com' },
       { name: 'Freedom Relay', url: 'https://fastrelay.xyz' }
