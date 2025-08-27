@@ -70,3 +70,10 @@ export type BuildRequest =
         txList: { to: string; value: bigint; data: string }[]
       }
     }
+  | {
+      type: 'privateWithdrawRequest'
+      params: {
+        actionExecutionType: ActionExecutionType
+        txList: { to: string; value: bigint; data: string }[]
+      }
+    }

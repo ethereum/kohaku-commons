@@ -551,6 +551,10 @@ export class RequestsController extends EventEmitter {
     if (type === 'privateRagequitRequest') {
       await this.#buildPrivacyPoolsUserRequest(params)
     }
+
+    if (type === 'privateWithdrawRequest') {
+      await this.#buildPrivacyPoolsUserRequest(params)
+    }
   }
 
   async #buildPrivacyPoolsUserRequest({

@@ -4,7 +4,8 @@ import { type ChainData, chainData, whitelistedChains } from './config'
 import EventEmitter from '../eventEmitter/eventEmitter'
 
 interface PrivacyPoolsFormUpdate {
-  amount?: string
+  depositAmount?: string
+  withdrawalAmount?: string
   seedPhrase?: string
   targetAddress?: string
 }
@@ -33,7 +34,9 @@ export class PrivacyPoolsController extends EventEmitter {
 
   #alchemyApiKey: string
 
-  amount: string = ''
+  depositAmount: string = ''
+
+  withdrawalAmount: string = ''
 
   seedPhrase: string = ''
 
@@ -98,12 +101,21 @@ export class PrivacyPoolsController extends EventEmitter {
     this.emitUpdate()
   }
 
-  public update({ amount, seedPhrase, targetAddress }: PrivacyPoolsFormUpdate) {
-    if (amount) {
-      this.amount = amount
+  public update({
+    depositAmount,
+    withdrawalAmount,
+    seedPhrase,
+    targetAddress
+  }: PrivacyPoolsFormUpdate) {
+    if (typeof depositAmount === 'string') {
+      this.depositAmount = depositAmount
     }
 
-    if (targetAddress) {
+    if (typeof withdrawalAmount === 'string') {
+      this.withdrawalAmount = withdrawalAmount
+    }
+
+    if (typeof targetAddress === 'string') {
       this.targetAddress = targetAddress
     }
 
@@ -117,7 +129,8 @@ export class PrivacyPoolsController extends EventEmitter {
   }
 
   public resetForm() {
-    this.amount = ''
+    this.depositAmount = ''
+    this.withdrawalAmount = ''
     this.targetAddress = ''
     this.selectedToken = ''
     this.#isInitialized = false
