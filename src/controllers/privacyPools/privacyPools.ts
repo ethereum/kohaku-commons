@@ -131,7 +131,6 @@ export class PrivacyPoolsController extends EventEmitter {
   public resetForm() {
     this.depositAmount = ''
     this.withdrawalAmount = ''
-    this.seedPhrase = ''
     this.targetAddress = ''
     this.selectedToken = ''
     this.#isInitialized = false
