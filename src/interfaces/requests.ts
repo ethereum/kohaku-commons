@@ -49,3 +49,31 @@ export type BuildRequest =
         actionExecutionType: ActionExecutionType
       }
     }
+  | {
+      type: 'privateDepositRequest'
+      params: {
+        actionExecutionType: ActionExecutionType
+        txList: { to: string; value: bigint; data: string }[]
+      }
+    }
+  | {
+      type: 'privateSendRequest'
+      params: {
+        actionExecutionType: ActionExecutionType
+        txList: { to: string; value: bigint; data: string }[]
+      }
+    }
+  | {
+      type: 'privateRagequitRequest'
+      params: {
+        actionExecutionType: ActionExecutionType
+        txList: { to: string; value: bigint; data: string }[]
+      }
+    }
+  | {
+      type: 'privateWithdrawRequest'
+      params: {
+        actionExecutionType: ActionExecutionType
+        txList: { to: string; value: bigint; data: string }[]
+      }
+    }

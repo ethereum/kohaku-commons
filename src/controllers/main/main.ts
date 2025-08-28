@@ -88,6 +88,7 @@ import { StorageController } from '../storage/storage'
 import { SwapAndBridgeController } from '../swapAndBridge/swapAndBridge'
 import { TransactionManagerController } from '../transaction/transactionManager'
 import { TransferController } from '../transfer/transfer'
+import { PrivacyPoolsController } from '../privacyPools/privacyPools'
 
 const STATUS_WRAPPED_METHODS = {
   removeAccount: 'INITIAL',
@@ -155,6 +156,8 @@ export class MainController extends EventEmitter {
 
   transfer: TransferController
 
+  privacyPools: PrivacyPoolsController
+
   signAccountOp: SignAccountOpController | null = null
 
   signAccOpInitError: string | null = null
@@ -207,6 +210,8 @@ export class MainController extends EventEmitter {
     fetch,
     relayerUrl,
     velcroUrl,
+    privacyPoolsAspUrl,
+    alchemyApiKey,
     featureFlags,
     swapApiKey,
     keystoreSigners,
@@ -219,6 +224,8 @@ export class MainController extends EventEmitter {
     fetch: Fetch
     relayerUrl: string
     velcroUrl: string
+    privacyPoolsAspUrl: string
+    alchemyApiKey: string
     featureFlags: Partial<FeatureFlags>
     swapApiKey: string
     keystoreSigners: Partial<{ [key in Key['type']]: KeystoreSignerType }>
@@ -238,9 +245,7 @@ export class MainController extends EventEmitter {
     this.keystore = new KeystoreController(platform, this.storage, keystoreSigners, windowManager)
     this.#externalSignerControllers = externalSignerControllers
     this.networks = new NetworksController({
-      defaultNetworksMode: this.featureFlags.isFeatureEnabled('testnetMode')
-        ? 'testnet'
-        : 'mainnet',
+      defaultNetworksMode: 'testnet',
       storage: this.storage,
       fetch,
       relayerUrl,
@@ -365,6 +370,7 @@ export class MainController extends EventEmitter {
         await this.setContractsDeployedToTrueIfDeployed(network)
       }
     )
+
     this.swapAndBridge = new SwapAndBridgeController({
       accounts: this.accounts,
       keystore: this.keystore,
@@ -490,6 +496,8 @@ export class MainController extends EventEmitter {
         )
       }
     })
+
+    this.privacyPools = new PrivacyPoolsController(this.keystore, privacyPoolsAspUrl, alchemyApiKey)
   }
 
   /**
