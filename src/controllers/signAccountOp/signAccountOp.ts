@@ -811,6 +811,20 @@ export class SignAccountOpController extends EventEmitter {
     hasNewEstimation
   }: SignAccountOpUpdateProps) {
     try {
+      console.log('DEBUG: update SIGN ACCOUNT CONTROLLER', {
+        gasPrices,
+        feeToken,
+        paidBy,
+        speed,
+        signingKeyAddr,
+        signingKeyType,
+        calls,
+        rbfAccountOps,
+        bundlerGasPrices,
+        blockGasLimit,
+        signedTransactionsCount,
+        hasNewEstimation
+      })
       // This must be at the top, otherwise it won't be updated because
       // most updates are frozen during the signing process
       if (typeof signedTransactionsCount !== 'undefined') {
@@ -973,6 +987,7 @@ export class SignAccountOpController extends EventEmitter {
   }
 
   updateStatus(forceStatusChange?: SigningStatus, replacementFeeLow = false) {
+    console.log('DEBUG: updateStatus', forceStatusChange, replacementFeeLow)
     // use this to go back to ReadyToSign when a broadcasting error is emitted
     if (forceStatusChange) {
       this.status = { type: forceStatusChange }
@@ -989,17 +1004,25 @@ export class SignAccountOpController extends EventEmitter {
 
     // if we have an estimation error, set the state so and return
     if (this.estimation.error) {
+      console.log('DEBUG: updateStatus estimation error', this.estimation.error)
       this.status = { type: SigningStatus.EstimationError }
       this.emitUpdate()
       return
     }
 
     if (this.errors.length) {
+      console.log('DEBUG: updateStatus errors', this.errors.length)
       this.status = { type: SigningStatus.UnableToSign }
       this.emitUpdate()
       return
     }
 
+    console.log('DEBUG: updateStatus getting ready to sing', {
+      isInitialized: this.isInitialized,
+      signingKeyAddr: this.accountOp.signingKeyAddr,
+      signingKeyType: this.accountOp.signingKeyType,
+      gasFeePayment: this.accountOp.gasFeePayment
+    })
     if (
       this.isInitialized &&
       this.accountOp.signingKeyAddr &&
