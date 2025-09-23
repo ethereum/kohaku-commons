@@ -1,4 +1,14 @@
-import { keccak256, parseCompactSignature, toBytes, type Address, type Hex } from 'viem'
+import {
+  bytesToHex,
+  hexToBytes,
+  keccak256,
+  parseCompactSignature,
+  toBytes,
+  type Address,
+  type Hex
+} from 'viem'
+import { hkdf } from '@noble/hashes/hkdf'
+import { sha256 } from '@noble/hashes/sha2'
 import { TypedMessage } from 'interfaces/userRequest'
 import { AccountsController } from 'controllers/accounts/accounts'
 import type { KeystoreController } from '../keystore/keystore'
@@ -161,8 +171,12 @@ export class PrivacyPoolsController extends EventEmitter {
 
     const appIdentifier = 'com.example.myapp'
 
-    const addressHash = keccak256(toBytes(this.#accounts?.accounts[0].addr as Address))
+    // Step 1: Derive dedicated address
+    // TODO: Change to the signer address derived from the Privacy Pools path
+    const signerAddress = this.#accounts?.accounts[0].addr as Address
+    const addressHash = keccak256(toBytes(signerAddress))
 
+    // Step 2: Construct EIP-712 payload
     const eip712Payload = {
       kind: 'typedMessage',
       domain: {
@@ -190,11 +204,35 @@ export class PrivacyPoolsController extends EventEmitter {
         ]
       }
     } as TypedMessage
-
-    const signature = await signer.signTypedData(eip712Payload)
+    // Step 3: Request signature
+    let signature: string | null = await signer.signTypedData(eip712Payload)
     const compactSignature = parseCompactSignature(signature as `0x${string}`)
 
-    this.signedTypedData = compactSignature.r
+    const rValue = compactSignature.r
+    compactSignature.yParityAndS = '0x' // Destroy s component
+    signature = null // Destroy signature component
+
+    // Step 4: Derive root secret
+    const rBytes = hexToBytes(rValue)
+    const saltBytes = hexToBytes(signerAddress)
+    const rootInfoBytes = new TextEncoder().encode('Standardized-Secret-Derivation-v1-Root')
+
+    const rootSecret = hkdf(sha256, rBytes, saltBytes, rootInfoBytes, 32)
+
+    // Step 5: Derive application secret
+    const appSaltBytes = new TextEncoder().encode(appIdentifier)
+
+    // TODO: make this dynamic, to generate
+    // the nullifyingKey, revocableKey, viewingPrivateKey and subsequent secrets
+    const appInfo = 'Standardized-Secret-Derivation-v1-App'
+    const appInfoBytes = new TextEncoder().encode(appInfo)
+
+    const appSecret = hkdf(sha256, rootSecret, appSaltBytes, appInfoBytes, 32)
+
+    // Securely wipe root secret
+    rootSecret.fill(0)
+
+    this.signedTypedData = bytesToHex(appSecret)
     this.emitUpdate()
   }
 
