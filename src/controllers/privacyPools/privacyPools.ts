@@ -7,10 +7,12 @@ import {
   type Address,
   type Hex
 } from 'viem'
+import { HDNodeWallet, Mnemonic } from 'ethers'
 import { hkdf } from '@noble/hashes/hkdf'
 import { sha256 } from '@noble/hashes/sha2'
 import { TypedMessage } from 'interfaces/userRequest'
 import { AccountsController } from 'controllers/accounts/accounts'
+import { SelectedAccountController } from 'controllers/selectedAccount/selectedAccount'
 import type { KeystoreController } from '../keystore/keystore'
 import { type ChainData, chainData, whitelistedChains } from './config'
 import EventEmitter from '../eventEmitter/eventEmitter'
@@ -36,6 +38,8 @@ export class PrivacyPoolsController extends EventEmitter {
 
   #keystore: KeystoreController | null = null
 
+  #selectedAccount: SelectedAccountController | null = null
+
   #isInitialized: boolean = false
 
   #initializationError: string | null = null
@@ -54,6 +58,8 @@ export class PrivacyPoolsController extends EventEmitter {
 
   signedTypedData: string | null = null
 
+  arbitratyAddress: Address | null = null
+
   seedPhrase: string = ''
 
   targetAddress: Address | string = ''
@@ -70,16 +76,18 @@ export class PrivacyPoolsController extends EventEmitter {
 
   constructor(
     keystore: KeystoreController,
-    privacyPoolsAspUrl: string,
     accounts: AccountsController,
+    selectedAccount: SelectedAccountController,
+    privacyPoolsAspUrl: string,
     alchemyApiKey: string
   ) {
     super()
 
     this.#keystore = keystore
+    this.#accounts = accounts
+    this.#selectedAccount = selectedAccount
     this.#privacyPoolsAspUrl = privacyPoolsAspUrl
     this.#alchemyApiKey = alchemyApiKey
-    this.#accounts = accounts
     this.#initialPromise = this.#load()
 
     this.emitUpdate()
@@ -114,6 +122,48 @@ export class PrivacyPoolsController extends EventEmitter {
       ])
     )
     this.#initialPromiseLoaded = true
+  }
+
+  async #deriveAddressFromArbitraryPath(hdPath: string) {
+    try {
+      const seedPhrase = await this.#getCurrentAccountSeed()
+
+      if (!seedPhrase) {
+        throw new Error('No seed phrase available for address derivation')
+      }
+
+      const mnemonic = Mnemonic.fromPhrase(seedPhrase)
+      const wallet = HDNodeWallet.fromMnemonic(mnemonic, hdPath)
+
+      console.log('DEBUG: Derived address from arbitrary path:', wallet.address)
+      this.arbitratyAddress = wallet.address as Address
+      this.emitUpdate()
+    } catch (error) {
+      console.error('Failed to derive address from arbitrary path:', error)
+      throw error
+    }
+  }
+
+  async #getCurrentAccountSeed(): Promise<string | null> {
+    try {
+      if (!this.#selectedAccount?.account || !this.#keystore?.isUnlocked) {
+        return null
+      }
+
+      const accountKeys = this.#keystore.getAccountKeys(this.#selectedAccount.account)
+
+      const internalKey = accountKeys.find((key) => key.type === 'internal' && key.meta?.fromSeedId)
+
+      if (!internalKey?.meta?.fromSeedId) {
+        return null
+      }
+
+      const savedSeed = await this.#keystore.getSavedSeed(internalKey.meta.fromSeedId)
+      return savedSeed?.seed || null
+    } catch (error) {
+      console.error('Failed to get current account seed:', error)
+      return null
+    }
   }
 
   public setSdkInitialized() {
@@ -161,6 +211,10 @@ export class PrivacyPoolsController extends EventEmitter {
   }
 
   public async signTypedData() {
+    const coinType = 9001
+    const dedicatedPath = `m/44'/${coinType}'/0'/0/0`
+    this.#deriveAddressFromArbitraryPath(dedicatedPath)
+
     const signer = await this.#keystore?.getSigner(
       this.#accounts?.accounts[0].addr as Address,
       'internal'
