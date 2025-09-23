@@ -497,7 +497,12 @@ export class MainController extends EventEmitter {
       }
     })
 
-    this.privacyPools = new PrivacyPoolsController(this.keystore, privacyPoolsAspUrl, alchemyApiKey)
+    this.privacyPools = new PrivacyPoolsController(
+      this.keystore,
+      privacyPoolsAspUrl,
+      this.accounts,
+      alchemyApiKey
+    )
   }
 
   /**

@@ -1,4 +1,6 @@
-import type { Address, Hex } from 'viem'
+import { keccak256, parseCompactSignature, toBytes, type Address, type Hex } from 'viem'
+import { TypedMessage } from 'interfaces/userRequest'
+import { AccountsController } from 'controllers/accounts/accounts'
 import type { KeystoreController } from '../keystore/keystore'
 import { type ChainData, chainData, whitelistedChains } from './config'
 import EventEmitter from '../eventEmitter/eventEmitter'
@@ -20,6 +22,8 @@ type PoolInfo = {
 }
 
 export class PrivacyPoolsController extends EventEmitter {
+  #accounts: AccountsController | null = null
+
   #keystore: KeystoreController | null = null
 
   #isInitialized: boolean = false
@@ -38,6 +42,8 @@ export class PrivacyPoolsController extends EventEmitter {
 
   withdrawalAmount: string = ''
 
+  signedTypedData: string | null = null
+
   seedPhrase: string = ''
 
   targetAddress: Address | string = ''
@@ -52,12 +58,18 @@ export class PrivacyPoolsController extends EventEmitter {
 
   chainData: ChainData | null = null
 
-  constructor(keystore: KeystoreController, privacyPoolsAspUrl: string, alchemyApiKey: string) {
+  constructor(
+    keystore: KeystoreController,
+    privacyPoolsAspUrl: string,
+    accounts: AccountsController,
+    alchemyApiKey: string
+  ) {
     super()
 
     this.#keystore = keystore
     this.#privacyPoolsAspUrl = privacyPoolsAspUrl
     this.#alchemyApiKey = alchemyApiKey
+    this.#accounts = accounts
     this.#initialPromise = this.#load()
 
     this.emitUpdate()
@@ -135,6 +147,54 @@ export class PrivacyPoolsController extends EventEmitter {
     this.selectedToken = ''
     this.#isInitialized = false
 
+    this.emitUpdate()
+  }
+
+  public async signTypedData() {
+    const signer = await this.#keystore?.getSigner(
+      this.#accounts?.accounts[0].addr as Address,
+      'internal'
+    )
+    if (!signer) {
+      throw new Error('Signer not found')
+    }
+
+    const appIdentifier = 'com.example.myapp'
+
+    const addressHash = keccak256(toBytes(this.#accounts?.accounts[0].addr as Address))
+
+    const eip712Payload = {
+      kind: 'typedMessage',
+      domain: {
+        name: 'Standardized Secret Derivation',
+        version: '1',
+        verifyingContract: '0x0000000000000000000000000000000000000000',
+        salt: keccak256(toBytes(appIdentifier))
+      },
+      message: {
+        purpose:
+          'This signature is used to deterministically derive application-specific secrets from your master seed. It is not a transaction and will not cost any gas.',
+        addressHash
+      },
+      primaryType: 'SecretDerivation',
+      types: {
+        EIP712Domain: [
+          { name: 'name', type: 'string' },
+          { name: 'version', type: 'string' },
+          { name: 'verifyingContract', type: 'address' },
+          { name: 'salt', type: 'bytes32' }
+        ],
+        SecretDerivation: [
+          { name: 'purpose', type: 'string' },
+          { name: 'addressHash', type: 'bytes32' }
+        ]
+      }
+    } as TypedMessage
+
+    const signature = await signer.signTypedData(eip712Payload)
+    const compactSignature = parseCompactSignature(signature as `0x${string}`)
+
+    this.signedTypedData = compactSignature.r
     this.emitUpdate()
   }
 
