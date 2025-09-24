@@ -58,8 +58,6 @@ export class PrivacyPoolsController extends EventEmitter {
 
   signedTypedData: string | null = null
 
-  arbitratyAddress: Address | null = null
-
   seedPhrase: string = ''
 
   targetAddress: Address | string = ''
@@ -135,9 +133,7 @@ export class PrivacyPoolsController extends EventEmitter {
       const mnemonic = Mnemonic.fromPhrase(seedPhrase)
       const wallet = HDNodeWallet.fromMnemonic(mnemonic, hdPath)
 
-      console.log('DEBUG: Derived address from arbitrary path:', wallet.address)
-      this.arbitratyAddress = wallet.address as Address
-      this.emitUpdate()
+      return wallet.address as Address
     } catch (error) {
       console.error('Failed to derive address from arbitrary path:', error)
       throw error
@@ -210,11 +206,7 @@ export class PrivacyPoolsController extends EventEmitter {
     this.emitUpdate()
   }
 
-  public async signTypedData() {
-    const coinType = 9001
-    const dedicatedPath = `m/44'/${coinType}'/0'/0/0`
-    this.#deriveAddressFromArbitraryPath(dedicatedPath)
-
+  public async generateAppSecret(appInfo: string = 'Standardized-Secret-Derivation-v1-App') {
     const signer = await this.#keystore?.getSigner(
       this.#accounts?.accounts[0].addr as Address,
       'internal'
@@ -223,12 +215,14 @@ export class PrivacyPoolsController extends EventEmitter {
       throw new Error('Signer not found')
     }
 
-    const appIdentifier = 'com.example.myapp'
+    const appIdentifier = 'privacypools.com'
 
     // Step 1: Derive dedicated address
-    // TODO: Change to the signer address derived from the Privacy Pools path
-    const signerAddress = this.#accounts?.accounts[0].addr as Address
+    const coinType = 9001
+    const privacyPoolsPath = `m/44'/${coinType}'/0'/0/0`
+    const signerAddress = await this.#deriveAddressFromArbitraryPath(privacyPoolsPath)
     const addressHash = keccak256(toBytes(signerAddress))
+    console.log('DEBUG: Derived address from arbitrary path:', signerAddress)
 
     // Step 2: Construct EIP-712 payload
     const eip712Payload = {
@@ -275,18 +269,16 @@ export class PrivacyPoolsController extends EventEmitter {
 
     // Step 5: Derive application secret
     const appSaltBytes = new TextEncoder().encode(appIdentifier)
-
-    // TODO: make this dynamic, to generate
-    // the nullifyingKey, revocableKey, viewingPrivateKey and subsequent secrets
-    const appInfo = 'Standardized-Secret-Derivation-v1-App'
     const appInfoBytes = new TextEncoder().encode(appInfo)
 
-    const appSecret = hkdf(sha256, rootSecret, appSaltBytes, appInfoBytes, 32)
+    const appSecretBytes = hkdf(sha256, rootSecret, appSaltBytes, appInfoBytes, 32)
+    const appSecret = bytesToHex(appSecretBytes)
 
     // Securely wipe root secret
     rootSecret.fill(0)
 
-    this.signedTypedData = bytesToHex(appSecret)
+    console.log('DEBUG: App secret:', appSecret)
+    this.signedTypedData = appSecret
     this.emitUpdate()
   }
 
