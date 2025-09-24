@@ -252,6 +252,7 @@ export class PrivacyPoolsController extends EventEmitter {
         ]
       }
     } as TypedMessage
+
     // Step 3: Request signature
     let signature: string | null = await signer.signTypedData(eip712Payload)
     const compactSignature = parseCompactSignature(signature as `0x${string}`)
