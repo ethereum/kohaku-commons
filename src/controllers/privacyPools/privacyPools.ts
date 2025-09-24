@@ -278,8 +278,10 @@ export class PrivacyPoolsController extends EventEmitter {
     // Securely wipe root secret
     rootSecret.fill(0)
 
-    console.log('DEBUG: App secret:', appSecret)
+    // TODO: This is a temporary assignation, to be removed later
     this.signedTypedData = appSecret
+    console.log('DEBUG: App secret:', appSecret)
+
     this.emitUpdate()
   }
 
