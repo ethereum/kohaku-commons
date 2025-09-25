@@ -500,8 +500,6 @@ export class MainController extends EventEmitter {
 
     this.privacyPools = new PrivacyPoolsController(
       this.keystore,
-      privacyPoolsAspUrl,
-      alchemyApiKey,
       this.accounts,
       this.networks,
       this.providers,
@@ -509,7 +507,9 @@ export class MainController extends EventEmitter {
       this.portfolio,
       this.activity,
       this.#externalSignerControllers,
-      relayerUrl
+      relayerUrl,
+      privacyPoolsAspUrl,
+      alchemyApiKey
     )
   }
 

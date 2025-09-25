@@ -1,4 +1,16 @@
-import type { Address, Hex } from 'viem'
+import {
+  bytesToHex,
+  hexToBytes,
+  keccak256,
+  parseCompactSignature,
+  toBytes,
+  type Address,
+  type Hex
+} from 'viem'
+import { HDNodeWallet, Mnemonic } from 'ethers'
+import { hkdf } from '@noble/hashes/hkdf'
+import { sha256 } from '@noble/hashes/sha2'
+import { TypedMessage } from 'interfaces/userRequest'
 import type { KeystoreController } from '../keystore/keystore'
 import { type ChainData, chainData, whitelistedChains } from './config'
 import EventEmitter from '../eventEmitter/eventEmitter'
@@ -35,7 +47,11 @@ type PoolInfo = {
 }
 
 export class PrivacyPoolsController extends EventEmitter {
+  #accounts: AccountsController | null = null
+
   #keystore: KeystoreController | null = null
+
+  #selectedAccount: SelectedAccountController | null = null
 
   #isInitialized: boolean = false
 
@@ -53,13 +69,9 @@ export class PrivacyPoolsController extends EventEmitter {
 
   #reestimateAbortController: AbortController | null = null
 
-  #accounts: AccountsController
-
   #networks: NetworksController
 
   #providers: ProvidersController
-
-  #selectedAccount: SelectedAccountController
 
   #portfolio: PortfolioController
 
@@ -81,6 +93,8 @@ export class PrivacyPoolsController extends EventEmitter {
 
   withdrawalAmount: string = ''
 
+  signedTypedData: string | null = null
+
   seedPhrase: string = ''
 
   targetAddress: Address | string = ''
@@ -97,8 +111,6 @@ export class PrivacyPoolsController extends EventEmitter {
 
   constructor(
     keystore: KeystoreController,
-    privacyPoolsAspUrl: string,
-    alchemyApiKey: string,
     accounts: AccountsController,
     networks: NetworksController,
     providers: ProvidersController,
@@ -106,11 +118,15 @@ export class PrivacyPoolsController extends EventEmitter {
     portfolio: PortfolioController,
     activity: ActivityController,
     externalSignerControllers: ExternalSignerControllers,
-    relayerUrl: string
+    relayerUrl: string,
+    privacyPoolsAspUrl: string,
+    alchemyApiKey: string
   ) {
     super()
 
     this.#keystore = keystore
+    this.#accounts = accounts
+    this.#selectedAccount = selectedAccount
     this.#privacyPoolsAspUrl = privacyPoolsAspUrl
     this.#alchemyApiKey = alchemyApiKey
     this.#accounts = accounts
@@ -128,7 +144,7 @@ export class PrivacyPoolsController extends EventEmitter {
   }
 
   async #load() {
-    await this.#selectedAccount.initialLoadPromise
+    await this.#selectedAccount?.initialLoadPromise
 
     this.chainDataByWhitelistedChains = Object.values(chainData).filter(
       (chain) =>
@@ -161,9 +177,48 @@ export class PrivacyPoolsController extends EventEmitter {
     this.#initialPromiseLoaded = true
   }
 
-  async #initSignAccOp(calls: Call[]) {
-    if (!this.#selectedAccount.account || this.signAccountOpController) return
+  async #deriveAddressFromArbitraryPath(hdPath: string) {
+    try {
+      const seedPhrase = await this.#getCurrentAccountSeed()
 
+      if (!seedPhrase) {
+        throw new Error('No seed phrase available for address derivation')
+      }
+
+      const mnemonic = Mnemonic.fromPhrase(seedPhrase)
+      const wallet = HDNodeWallet.fromMnemonic(mnemonic, hdPath)
+
+      return wallet.address as Address
+    } catch (error) {
+      console.error('Failed to derive address from arbitrary path:', error)
+      throw error
+    }
+  }
+
+  async #getCurrentAccountSeed(): Promise<string | null> {
+    try {
+      if (!this.#selectedAccount?.account || !this.#keystore?.isUnlocked) {
+        return null
+      }
+
+      const accountKeys = this.#keystore.getAccountKeys(this.#selectedAccount.account)
+
+      const internalKey = accountKeys.find((key) => key.type === 'internal' && key.meta?.fromSeedId)
+
+      if (!internalKey?.meta?.fromSeedId) {
+        return null
+      }
+
+      const savedSeed = await this.#keystore.getSavedSeed(internalKey.meta.fromSeedId)
+      return savedSeed?.seed || null
+    } catch (error) {
+      console.error('Failed to get current account seed:', error)
+      return null
+    }
+  }
+
+  async #initSignAccOp(calls: Call[]) {
+    if (!this.#selectedAccount?.account || this.signAccountOpController || !this.#accounts) return
     // Use the network from the first call to determine the chainId
     const chainId = calls.length > 0 ? BigInt(11155111) : 11155111n // Default to Sepolia for now
     const network = this.#networks.networks.find((net) => net.chainId === chainId)
@@ -227,14 +282,6 @@ export class PrivacyPoolsController extends EventEmitter {
     // propagate updates from signAccountOp here
     this.#signAccountOpSubscriptions.push(
       this.signAccountOpController.onUpdate(() => {
-        console.log('DEBUG: SignAccountOp updated', {
-          readyToSign: this.signAccountOpController.readyToSign,
-          status: this.signAccountOpController.status,
-          isInitialized: this.signAccountOpController.isInitialized,
-          signingKeyAddr: this.signAccountOpController.accountOp.signingKeyAddr,
-          signingKeyType: this.signAccountOpController.accountOp.signingKeyType,
-          gasFeePayment: this.signAccountOpController.accountOp.gasFeePayment
-        })
         this.emitUpdate()
       })
     )
@@ -247,15 +294,6 @@ export class PrivacyPoolsController extends EventEmitter {
     )
 
     this.reestimate()
-
-    // Debug: Check why readyToSign might be false
-    console.log('DEBUG: SignAccountOp readiness check', {
-      isInitialized: this.signAccountOpController.isInitialized,
-      signingKeyAddr: this.signAccountOpController.accountOp.signingKeyAddr,
-      signingKeyType: this.signAccountOpController.accountOp.signingKeyType,
-      gasFeePayment: this.signAccountOpController.accountOp.gasFeePayment,
-      status: this.signAccountOpController.status
-    })
   }
 
   update({ depositAmount, withdrawalAmount, seedPhrase, targetAddress }: PrivacyPoolsFormUpdate) {
@@ -347,6 +385,85 @@ export class PrivacyPoolsController extends EventEmitter {
     loop()
   }
 
+  public async generateAppSecret(appInfo: string = 'Standardized-Secret-Derivation-v1-App') {
+    const signer = await this.#keystore?.getSigner(
+      this.#accounts?.accounts[0].addr as Address,
+      'internal'
+    )
+    if (!signer) {
+      throw new Error('Signer not found')
+    }
+
+    const appIdentifier = 'privacypools.com'
+
+    // Step 1: Derive dedicated address
+    const coinType = 9001
+    const privacyPoolsPath = `m/44'/${coinType}'/0'/0/0`
+    const signerAddress = await this.#deriveAddressFromArbitraryPath(privacyPoolsPath)
+    const addressHash = keccak256(toBytes(signerAddress))
+    console.log('DEBUG: Derived address from arbitrary path:', signerAddress)
+
+    // Step 2: Construct EIP-712 payload
+    const eip712Payload = {
+      kind: 'typedMessage',
+      domain: {
+        name: 'Standardized Secret Derivation',
+        version: '1',
+        verifyingContract: '0x0000000000000000000000000000000000000000',
+        salt: keccak256(toBytes(appIdentifier))
+      },
+      message: {
+        purpose:
+          'This signature is used to deterministically derive application-specific secrets from your master seed. It is not a transaction and will not cost any gas.',
+        addressHash
+      },
+      primaryType: 'SecretDerivation',
+      types: {
+        EIP712Domain: [
+          { name: 'name', type: 'string' },
+          { name: 'version', type: 'string' },
+          { name: 'verifyingContract', type: 'address' },
+          { name: 'salt', type: 'bytes32' }
+        ],
+        SecretDerivation: [
+          { name: 'purpose', type: 'string' },
+          { name: 'addressHash', type: 'bytes32' }
+        ]
+      }
+    } as TypedMessage
+
+    // Step 3: Request signature
+    let signature: string | null = await signer.signTypedData(eip712Payload)
+    const compactSignature = parseCompactSignature(signature as `0x${string}`)
+
+    const rValue = compactSignature.r
+    compactSignature.yParityAndS = '0x' // Destroy s component
+    signature = null // Destroy signature component
+
+    // Step 4: Derive root secret
+    const rBytes = hexToBytes(rValue)
+    const saltBytes = hexToBytes(signerAddress)
+    const rootInfoBytes = new TextEncoder().encode('Standardized-Secret-Derivation-v1-Root')
+
+    const rootSecret = hkdf(sha256, rBytes, saltBytes, rootInfoBytes, 32)
+
+    // Step 5: Derive application secret
+    const appSaltBytes = new TextEncoder().encode(appIdentifier)
+    const appInfoBytes = new TextEncoder().encode(appInfo)
+
+    const appSecretBytes = hkdf(sha256, rootSecret, appSaltBytes, appInfoBytes, 32)
+    const appSecret = bytesToHex(appSecretBytes)
+
+    // Securely wipe root secret
+    rootSecret.fill(0)
+
+    // TODO: This is a temporary assignation, to be removed later
+    this.signedTypedData = appSecret
+    console.log('DEBUG: App secret:', appSecret)
+
+    this.emitUpdate()
+  }
+
   setSdkInitialized() {
     this.#isInitialized = true
     this.#initializationError = null
@@ -361,7 +478,7 @@ export class PrivacyPoolsController extends EventEmitter {
 
   async syncSignAccountOp(calls?: Call[]) {
     console.log('DEBUG: syncSignAccountOp', calls)
-    if (!this.#selectedAccount.account) return
+    if (!this.#selectedAccount?.account) return
 
     // Build the calls based on your privacy pools operations
     const transactionCalls: Call[] = calls || []
