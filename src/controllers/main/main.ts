@@ -78,6 +78,7 @@ import { RequestsController } from '../requests/requests'
 import { SelectedAccountController } from '../selectedAccount/selectedAccount'
 import {
   SIGN_ACCOUNT_OP_MAIN,
+  SIGN_ACCOUNT_OP_PRIVACY_POOLS,
   SIGN_ACCOUNT_OP_SWAP,
   SIGN_ACCOUNT_OP_TRANSFER,
   SignAccountOpType
@@ -500,7 +501,13 @@ export class MainController extends EventEmitter {
     this.privacyPools = new PrivacyPoolsController(
       this.keystore,
       this.accounts,
+      this.networks,
+      this.providers,
       this.selectedAccount,
+      this.portfolio,
+      this.activity,
+      this.#externalSignerControllers,
+      relayerUrl,
       privacyPoolsAspUrl,
       alchemyApiKey
     )
@@ -739,10 +746,14 @@ export class MainController extends EventEmitter {
 
     let signAccountOp: SignAccountOpController | null
 
+    console.log('DEBUG: handleSignAndBroadcastAccountOp', type)
+
     if (type === SIGN_ACCOUNT_OP_MAIN) {
       signAccountOp = this.signAccountOp
     } else if (type === SIGN_ACCOUNT_OP_SWAP) {
       signAccountOp = this.swapAndBridge.signAccountOpController
+    } else if (type === SIGN_ACCOUNT_OP_PRIVACY_POOLS) {
+      signAccountOp = this.privacyPools.signAccountOpController
     } else {
       signAccountOp = this.transfer.signAccountOpController
     }
@@ -2013,6 +2024,14 @@ export class MainController extends EventEmitter {
       }
 
       this.transfer.resetForm()
+    }
+
+    if (type === SIGN_ACCOUNT_OP_PRIVACY_POOLS) {
+      if (this.privacyPools.shouldTrackLatestBroadcastedAccountOp) {
+        this.privacyPools.latestBroadcastedAccountOp = submittedAccountOp
+      }
+
+      this.privacyPools.resetForm()
     }
 
     await this.#notificationManager.create({
