@@ -10,7 +10,6 @@ import {
 import { HDNodeWallet, Mnemonic } from 'ethers'
 import { hkdf } from '@noble/hashes/hkdf'
 import { sha256 } from '@noble/hashes/sha2'
-import { TypedMessage } from 'interfaces/userRequest'
 import type { KeystoreController } from '../keystore/keystore'
 import { type ChainData, chainData, whitelistedChains } from './config'
 import EventEmitter from '../eventEmitter/eventEmitter'
@@ -18,6 +17,7 @@ import { SignAccountOpController } from '../signAccountOp/signAccountOp'
 import { getBaseAccount } from '../../libs/account/getBaseAccount'
 import { AccountOp } from '../../libs/accountOp/accountOp'
 import { Call } from '../../libs/accountOp/types'
+import { KeystoreSigner } from '../../libs/keystoreSigner/keystoreSigner'
 import { getAmbirePaymasterService } from '../../libs/erc7677/erc7677'
 import { randomId } from '../../libs/humanizer/utils'
 import { EstimationStatus } from '../estimation/types'
@@ -27,7 +27,8 @@ import { NetworksController } from '../networks/networks'
 import { PortfolioController } from '../portfolio/portfolio'
 import { ProvidersController } from '../providers/providers'
 import { SelectedAccountController } from '../selectedAccount/selectedAccount'
-import { ExternalSignerControllers } from '../../interfaces/keystore'
+import { ExternalSignerControllers, Key } from '../../interfaces/keystore'
+import { getAppSecret, getEip712Payload } from './derivation'
 import wait from '../../utils/wait'
 
 interface PrivacyPoolsFormUpdate {
@@ -177,22 +178,52 @@ export class PrivacyPoolsController extends EventEmitter {
     this.#initialPromiseLoaded = true
   }
 
-  async #deriveAddressFromArbitraryPath(hdPath: string) {
-    try {
-      const seedPhrase = await this.#getCurrentAccountSeed()
+  async #generateAppSecretInternal(appInfo: string): Promise<string> {
+    const appIdentifier = 'privacypools.com'
 
-      if (!seedPhrase) {
-        throw new Error('No seed phrase available for address derivation')
-      }
+    // Step 1: Derive dedicated address and wallet
+    const coinType = 9001
+    const privacyPoolsPath = `m/44'/${coinType}'/0'/0/0`
+    const seedPhrase = await this.#getCurrentAccountSeed()
 
-      const mnemonic = Mnemonic.fromPhrase(seedPhrase)
-      const wallet = HDNodeWallet.fromMnemonic(mnemonic, hdPath)
-
-      return wallet.address as Address
-    } catch (error) {
-      console.error('Failed to derive address from arbitrary path:', error)
-      throw error
+    if (!seedPhrase) {
+      throw new Error('No seed phrase available for key derivation')
     }
+
+    const mnemonic = Mnemonic.fromPhrase(seedPhrase)
+    const wallet = HDNodeWallet.fromMnemonic(mnemonic, privacyPoolsPath)
+    const signerAddress = wallet.address as Address
+    const privateKey = wallet.privateKey
+
+    // Create a temporary Key object
+    const tempKey: Key = {
+      addr: signerAddress,
+      type: 'internal',
+      label: 'Privacy Pools Temporary Key',
+      dedicatedToOneSA: true,
+      isExternallyStored: false,
+      meta: {
+        createdAt: Date.now(),
+        privacyPools: true,
+        temporary: true
+      }
+    }
+
+    const signer = new KeystoreSigner(tempKey, privateKey)
+
+    const addressHash = keccak256(toBytes(signerAddress))
+
+    // Step 2: Construct EIP-712 payload
+    const eip712Payload = getEip712Payload(appIdentifier, addressHash)
+
+    // Step 3: Request signature using the wallet directly
+    let signature: string | null = await signer.signTypedData(eip712Payload)
+
+    const appSecret = getAppSecret(signature, signerAddress, appIdentifier, appInfo)
+
+    signature = null // Destroy signature component
+
+    return appSecret
   }
 
   async #getCurrentAccountSeed(): Promise<string | null> {
@@ -223,8 +254,6 @@ export class PrivacyPoolsController extends EventEmitter {
     const chainId = calls.length > 0 ? BigInt(11155111) : 11155111n // Default to Sepolia for now
     const network = this.#networks.networks.find((net) => net.chainId === chainId)
 
-    console.log('DEBUG: initSignAccountOp network', network)
-
     if (!network) return
 
     const provider = this.#providers.providers[network.chainId.toString()]
@@ -234,8 +263,6 @@ export class PrivacyPoolsController extends EventEmitter {
     )
 
     if (!this.#keystore) return
-
-    console.log('DEBUG: initSignAccountOp keystore', this.#keystore)
 
     const baseAcc = getBaseAccount(
       this.#selectedAccount.account,
@@ -259,8 +286,6 @@ export class PrivacyPoolsController extends EventEmitter {
         paymasterService: getAmbirePaymasterService(baseAcc, this.#relayerUrl)
       }
     }
-
-    console.log('DEBUG: initSignAccountOp accountOp', accountOp)
 
     this.signAccountOpController = new SignAccountOpController(
       this.#accounts,
@@ -354,6 +379,86 @@ export class PrivacyPoolsController extends EventEmitter {
     this.emitUpdate()
   }
 
+  setSdkInitialized() {
+    this.#isInitialized = true
+    this.#initializationError = null
+
+    this.emitUpdate()
+  }
+
+  setUserProceeded(hasProceeded: boolean) {
+    this.hasProceeded = hasProceeded
+    this.emitUpdate()
+  }
+
+  async generateKeys() {
+    try {
+      // Step 1: Generate NullifyingKey
+      const nullifyingKey = await this.#generateAppSecretInternal('nullifyingKey')
+      console.log('DEBUG: Nullifying key:', nullifyingKey)
+
+      // Step 2: Generate RevocableKey
+      const revocableKey = await this.#generateAppSecretInternal('revocableKey')
+      console.log('DEBUG: Revocable key:', revocableKey)
+
+      // Step 3: Generate ViewingKey
+      const viewingKey = await this.#generateAppSecretInternal('viewingKey')
+      console.log('DEBUG: Viewing key:', viewingKey)
+
+      // TODO: Encrypt and store keys in Extension Local Storage
+
+      return {
+        nullifyingKey,
+        revocableKey,
+        viewingKey
+      }
+    } catch (error) {
+      console.error('Failed to generate keys:', error)
+      throw error
+    }
+  }
+
+  async generateSecret(appInfo: string = 'Standardized-Secret-Derivation-v1-App') {
+    try {
+      const appSecret = await this.#generateAppSecretInternal(appInfo)
+
+      // TODO: Encrypt before saving in this.signedTypedData
+
+      this.signedTypedData = appSecret
+      console.log('DEBUG: App secret:', appSecret)
+
+      this.emitUpdate()
+    } catch (error) {
+      console.error('Failed to generate app secret:', error)
+      throw error
+    }
+  }
+
+  async syncSignAccountOp(calls?: Call[]) {
+    if (!this.#selectedAccount?.account) return
+
+    // Build the calls based on your privacy pools operations
+    const transactionCalls: Call[] = calls || []
+
+    if (!transactionCalls.length) return
+
+    try {
+      // If SignAccountOpController is already initialized, we just update it
+      if (this.signAccountOpController) {
+        this.signAccountOpController.update({ calls: transactionCalls })
+        return
+      }
+
+      await this.#initSignAccOp(transactionCalls)
+    } catch (error) {
+      this.emitError({
+        level: 'major',
+        message: 'Failed to initialize transaction signing',
+        error: error instanceof Error ? error : new Error('Unknown error in syncSignAccountOp')
+      })
+    }
+  }
+
   async reestimate() {
     // Don't run the estimation loop if there is no SignAccountOpController or if the loop is already running.
     if (!this.signAccountOpController || this.#reestimateAbortController) return
@@ -368,7 +473,6 @@ export class PrivacyPoolsController extends EventEmitter {
         if (signal.aborted) break
 
         if (this.signAccountOpController?.estimation.status !== EstimationStatus.Loading) {
-          console.log('DEBUG: signAccountOpController estimate')
           // eslint-disable-next-line no-await-in-loop
           await this.signAccountOpController?.estimate()
         }
@@ -383,125 +487,6 @@ export class PrivacyPoolsController extends EventEmitter {
     }
 
     loop()
-  }
-
-  public async generateAppSecret(appInfo: string = 'Standardized-Secret-Derivation-v1-App') {
-    const signer = await this.#keystore?.getSigner(
-      this.#accounts?.accounts[0].addr as Address,
-      'internal'
-    )
-    if (!signer) {
-      throw new Error('Signer not found')
-    }
-
-    const appIdentifier = 'privacypools.com'
-
-    // Step 1: Derive dedicated address
-    const coinType = 9001
-    const privacyPoolsPath = `m/44'/${coinType}'/0'/0/0`
-    const signerAddress = await this.#deriveAddressFromArbitraryPath(privacyPoolsPath)
-    const addressHash = keccak256(toBytes(signerAddress))
-    console.log('DEBUG: Derived address from arbitrary path:', signerAddress)
-
-    // Step 2: Construct EIP-712 payload
-    const eip712Payload = {
-      kind: 'typedMessage',
-      domain: {
-        name: 'Standardized Secret Derivation',
-        version: '1',
-        verifyingContract: '0x0000000000000000000000000000000000000000',
-        salt: keccak256(toBytes(appIdentifier))
-      },
-      message: {
-        purpose:
-          'This signature is used to deterministically derive application-specific secrets from your master seed. It is not a transaction and will not cost any gas.',
-        addressHash
-      },
-      primaryType: 'SecretDerivation',
-      types: {
-        EIP712Domain: [
-          { name: 'name', type: 'string' },
-          { name: 'version', type: 'string' },
-          { name: 'verifyingContract', type: 'address' },
-          { name: 'salt', type: 'bytes32' }
-        ],
-        SecretDerivation: [
-          { name: 'purpose', type: 'string' },
-          { name: 'addressHash', type: 'bytes32' }
-        ]
-      }
-    } as TypedMessage
-
-    // Step 3: Request signature
-    let signature: string | null = await signer.signTypedData(eip712Payload)
-    const compactSignature = parseCompactSignature(signature as `0x${string}`)
-
-    const rValue = compactSignature.r
-    compactSignature.yParityAndS = '0x' // Destroy s component
-    signature = null // Destroy signature component
-
-    // Step 4: Derive root secret
-    const rBytes = hexToBytes(rValue)
-    const saltBytes = hexToBytes(signerAddress)
-    const rootInfoBytes = new TextEncoder().encode('Standardized-Secret-Derivation-v1-Root')
-
-    const rootSecret = hkdf(sha256, rBytes, saltBytes, rootInfoBytes, 32)
-
-    // Step 5: Derive application secret
-    const appSaltBytes = new TextEncoder().encode(appIdentifier)
-    const appInfoBytes = new TextEncoder().encode(appInfo)
-
-    const appSecretBytes = hkdf(sha256, rootSecret, appSaltBytes, appInfoBytes, 32)
-    const appSecret = bytesToHex(appSecretBytes)
-
-    // Securely wipe root secret
-    rootSecret.fill(0)
-
-    // TODO: This is a temporary assignation, to be removed later
-    this.signedTypedData = appSecret
-    console.log('DEBUG: App secret:', appSecret)
-
-    this.emitUpdate()
-  }
-
-  setSdkInitialized() {
-    this.#isInitialized = true
-    this.#initializationError = null
-
-    this.emitUpdate()
-  }
-
-  setUserProceeded(hasProceeded: boolean) {
-    this.hasProceeded = hasProceeded
-    this.emitUpdate()
-  }
-
-  async syncSignAccountOp(calls?: Call[]) {
-    console.log('DEBUG: syncSignAccountOp', calls)
-    if (!this.#selectedAccount?.account) return
-
-    // Build the calls based on your privacy pools operations
-    const transactionCalls: Call[] = calls || []
-
-    if (!transactionCalls.length) return
-
-    try {
-      // If SignAccountOpController is already initialized, we just update it
-      if (this.signAccountOpController) {
-        console.log('DEBUG: signAccountOpController already initialized', transactionCalls)
-        this.signAccountOpController.update({ calls: transactionCalls })
-        return
-      }
-
-      await this.#initSignAccOp(transactionCalls)
-    } catch (error) {
-      console.error('DEBUG: Error in syncSignAccountOp', error)
-      this.emitError({
-        level: 'major',
-        message: 'Failed to initialize transaction signing',
-        error: error instanceof Error ? error : new Error('Unknown error in syncSignAccountOp')
-      })
-    }
   }
 
   get isInitialized(): boolean {
