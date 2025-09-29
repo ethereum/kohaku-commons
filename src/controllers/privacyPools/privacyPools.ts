@@ -1,15 +1,5 @@
-import {
-  bytesToHex,
-  hexToBytes,
-  keccak256,
-  parseCompactSignature,
-  toBytes,
-  type Address,
-  type Hex
-} from 'viem'
+import { keccak256, toBytes, type Address, type Hex } from 'viem'
 import { HDNodeWallet, Mnemonic } from 'ethers'
-import { hkdf } from '@noble/hashes/hkdf'
-import { sha256 } from '@noble/hashes/sha2'
 import type { KeystoreController } from '../keystore/keystore'
 import { type ChainData, chainData, whitelistedChains } from './config'
 import EventEmitter from '../eventEmitter/eventEmitter'
@@ -36,6 +26,7 @@ interface PrivacyPoolsFormUpdate {
   withdrawalAmount?: string
   seedPhrase?: string
   targetAddress?: string
+  importedSecretNote?: string
 }
 
 type Hash = bigint
@@ -101,6 +92,8 @@ export class PrivacyPoolsController extends EventEmitter {
   targetAddress: Address | string = ''
 
   selectedToken: string = ''
+
+  importedSecretNote: string = ''
 
   poolsByChain: PoolInfo[] = []
 
@@ -321,7 +314,13 @@ export class PrivacyPoolsController extends EventEmitter {
     this.reestimate()
   }
 
-  update({ depositAmount, withdrawalAmount, seedPhrase, targetAddress }: PrivacyPoolsFormUpdate) {
+  update({
+    depositAmount,
+    withdrawalAmount,
+    seedPhrase,
+    targetAddress,
+    importedSecretNote
+  }: PrivacyPoolsFormUpdate) {
     if (typeof depositAmount === 'string') {
       this.depositAmount = depositAmount
     }
@@ -332,6 +331,9 @@ export class PrivacyPoolsController extends EventEmitter {
 
     if (typeof targetAddress === 'string') {
       this.targetAddress = targetAddress
+    }
+    if (typeof importedSecretNote === 'string') {
+      this.importedSecretNote = importedSecretNote
     }
 
     this.seedPhrase = seedPhrase || ''
