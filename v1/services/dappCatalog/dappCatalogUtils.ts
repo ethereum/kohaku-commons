@@ -1,7 +1,10 @@
 import { fetchCaught } from '../fetch'
 import { AmbireDappManifest, SupportedWeb3Connectivity } from './types'
 
+type NetworkId = number
+
 export const chainIdToWalletNetworkId = (chainId: number): NetworkId | null => {
+  throw new Error('Not implemented')
   // TODO: v2
   // return networks.find((n) => n.chainId === chainId)?.id || null
 }
