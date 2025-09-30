@@ -7,6 +7,10 @@ import { Bundler } from './bundler'
 import { GasSpeeds, UserOpStatus } from './types'
 
 export class Etherspot extends Bundler {
+  public shouldReestimateBeforeBroadcast(network: Network): boolean {
+    throw new Error('Method not implemented.')
+  }
+
   protected getUrl(network: Network): string {
     return `https://rpc.etherspot.io/v2/${network.chainId.toString()}?api-key=${
       process.env.REACT_APP_ETHERSPOT_API_KEY
