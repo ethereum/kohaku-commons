@@ -1,6 +1,7 @@
-import { JsonRpcProvider, Network } from 'ethers'
+import { Network } from 'ethers'
 
 import { Network as NetworkInterface } from '../../interfaces/network'
+import { HeliosEthersProvider } from './HeliosEthersProvider'
 
 interface ProviderOptions {
   batchMaxCount: number
@@ -31,11 +32,13 @@ const getRpcProvider = (
     const staticNetwork = Network.from(Number(chainId))
 
     if (staticNetwork) {
-      return new JsonRpcProvider(rpcUrl, staticNetwork, { staticNetwork, ...options })
+      // return new JsonRpcProvider(rpcUrl, staticNetwork, { staticNetwork, ...options })
+      return new HeliosEthersProvider(rpcUrl, staticNetwork)
     }
   }
 
-  return new JsonRpcProvider(rpcUrl)
+  // return new JsonRpcProvider(rpcUrl)
+  return new HeliosEthersProvider(rpcUrl)
 }
 
 export { getRpcProvider }

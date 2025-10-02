@@ -400,7 +400,7 @@ export class PortfolioController extends EventEmitter {
       !this.#portfolioLibs.has(key) ||
       this.#portfolioLibs.get(key)?.network?.selectedRpcUrl !==
         // eslint-disable-next-line no-underscore-dangle
-        providers[network.chainId.toString()]?._getConnection().url
+        providers[network.chainId.toString()]?.getRpcUrl()
     ) {
       try {
         this.#portfolioLibs.set(

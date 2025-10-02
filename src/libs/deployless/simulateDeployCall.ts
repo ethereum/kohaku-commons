@@ -1,5 +1,6 @@
-import { JsonRpcProvider, ZeroAddress } from 'ethers'
+import { ZeroAddress } from 'ethers'
 
+import { RPCProvider } from 'interfaces/provider'
 import AmbireFactory from '../../../contracts/compiled/AmbireFactory.json'
 import { AMBIRE_ACCOUNT_FACTORY, DEPLOYLESS_SIMULATION_FROM } from '../../consts/deploy'
 import { getSmartAccount, getSpoof } from '../account/account'
@@ -11,7 +12,7 @@ import { DeploylessMode, fromDescriptor } from './deployless'
 // if the call is successful, it means Ambire smart accounts are supported
 // on the given network
 export async function getSASupport(
-  provider: JsonRpcProvider
+  provider: RPCProvider
 ): Promise<{ addressMatches: boolean; supportsStateOverride: boolean }> {
   const smartAccount = await getSmartAccount(
     [
