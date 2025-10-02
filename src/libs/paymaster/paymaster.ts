@@ -279,7 +279,7 @@ export class Paymaster extends AbstractPaymaster {
         salt: acc.creation?.salt,
         key: acc.associatedKeys[0],
         // eslint-disable-next-line no-underscore-dangle
-        rpcUrl: this.provider!._getConnection().url,
+        rpcUrl: this.provider!.getRpcUrl(),
         bundler: userOp.bundler
       })
     })
