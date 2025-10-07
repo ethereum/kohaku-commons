@@ -1,4 +1,4 @@
-import { keccak256, toBytes, type Address, type Hex } from 'viem'
+import { formatUnits, keccak256, parseUnits, toBytes, type Address, type Hex } from 'viem'
 import { HDNodeWallet, Mnemonic } from 'ethers'
 import type { KeystoreController } from '../keystore/keystore'
 import { type ChainData, chainData, whitelistedChains } from './config'
@@ -18,15 +18,26 @@ import { PortfolioController } from '../portfolio/portfolio'
 import { ProvidersController } from '../providers/providers'
 import { SelectedAccountController } from '../selectedAccount/selectedAccount'
 import { ExternalSignerControllers, Key } from '../../interfaces/keystore'
+import { AddressState } from '../../interfaces/domains'
+import { getTokenAmount } from '../../libs/portfolio/helpers'
+import {
+  convertTokenPriceToBigInt,
+  getSafeAmountFromFieldValue
+} from '../../utils/numbers/formatters'
 import { getAppSecret, getEip712Payload } from './derivation'
 import wait from '../../utils/wait'
+
+const HARD_CODED_CURRENCY = 'usd'
 
 interface PrivacyPoolsFormUpdate {
   depositAmount?: string
   withdrawalAmount?: string
   seedPhrase?: string
-  targetAddress?: string
+  addressState?: AddressState
   importedSecretNote?: string
+  selectedToken?: any
+  shouldSetMaxAmount?: boolean
+  isRecipientAddressUnknownAgreed?: boolean
 }
 
 type Hash = bigint
@@ -36,6 +47,12 @@ type PoolInfo = {
   address: Hex
   scope: Hash
   deploymentBlock: bigint
+}
+
+const DEFAULT_ADDRESS_STATE = {
+  fieldValue: '',
+  ensAddress: '',
+  isDomainResolving: false
 }
 
 export class PrivacyPoolsController extends EventEmitter {
@@ -89,11 +106,32 @@ export class PrivacyPoolsController extends EventEmitter {
 
   seedPhrase: string = ''
 
-  targetAddress: Address | string = ''
+  addressState: AddressState = { ...DEFAULT_ADDRESS_STATE }
 
-  selectedToken: string = ''
+  #selectedToken: any = null
 
   importedSecretNote: string = ''
+
+  // Transfer/Withdrawal-specific properties
+  amountInFiat: string = ''
+
+  amountFieldMode: 'token' | 'fiat' = 'token'
+
+  isRecipientAddressUnknown: boolean = false
+
+  isRecipientAddressUnknownAgreed: boolean = false
+
+  latestBroadcastedToken: any = null
+
+  programmaticUpdateCounter: number = 0
+
+  validationFormMsgs: {
+    amount: { success: boolean; message: string }
+    recipientAddress: { success: boolean; message: string }
+  } = {
+    amount: { success: true, message: '' },
+    recipientAddress: { success: true, message: '' }
+  }
 
   poolsByChain: PoolInfo[] = []
 
@@ -314,12 +352,52 @@ export class PrivacyPoolsController extends EventEmitter {
     this.reestimate()
   }
 
+  #calculateAmountInFiat(amount: string) {
+    if (!amount || !this.selectedToken) {
+      this.amountInFiat = ''
+      return
+    }
+
+    const tokenPrice = this.selectedToken?.priceIn?.find(
+      (p: any) => p.baseCurrency === HARD_CODED_CURRENCY
+    )?.price
+
+    if (!tokenPrice || typeof this.selectedToken.decimals !== 'number') {
+      this.amountInFiat = ''
+      return
+    }
+
+    try {
+      const formattedAmount = parseUnits(
+        getSafeAmountFromFieldValue(amount, this.selectedToken.decimals),
+        this.selectedToken.decimals
+      )
+
+      if (!formattedAmount) {
+        this.amountInFiat = ''
+        return
+      }
+
+      const { tokenPriceBigInt, tokenPriceDecimals } = convertTokenPriceToBigInt(tokenPrice)
+
+      this.amountInFiat = formatUnits(
+        formattedAmount * tokenPriceBigInt,
+        this.selectedToken.decimals + tokenPriceDecimals
+      )
+    } catch (error) {
+      this.amountInFiat = ''
+    }
+  }
+
   update({
     depositAmount,
     withdrawalAmount,
     seedPhrase,
-    targetAddress,
-    importedSecretNote
+    addressState,
+    importedSecretNote,
+    selectedToken,
+    shouldSetMaxAmount,
+    isRecipientAddressUnknownAgreed
   }: PrivacyPoolsFormUpdate) {
     if (typeof depositAmount === 'string') {
       this.depositAmount = depositAmount
@@ -327,13 +405,35 @@ export class PrivacyPoolsController extends EventEmitter {
 
     if (typeof withdrawalAmount === 'string') {
       this.withdrawalAmount = withdrawalAmount
+      this.#calculateAmountInFiat(withdrawalAmount)
     }
 
-    if (typeof targetAddress === 'string') {
-      this.targetAddress = targetAddress
+    if (addressState) {
+      this.addressState = {
+        ...this.addressState,
+        ...addressState
+      }
+
+      // Validations if needed
+      // this.#onRecipientAddressChange()
     }
+
     if (typeof importedSecretNote === 'string') {
       this.importedSecretNote = importedSecretNote
+    }
+
+    if (selectedToken !== undefined) {
+      this.selectedToken = selectedToken
+    }
+
+    if (shouldSetMaxAmount && this.maxAmount) {
+      this.withdrawalAmount = this.maxAmount
+      this.#calculateAmountInFiat(this.maxAmount)
+      this.programmaticUpdateCounter++
+    }
+
+    if (typeof isRecipientAddressUnknownAgreed === 'boolean') {
+      this.isRecipientAddressUnknownAgreed = isRecipientAddressUnknownAgreed
     }
 
     this.seedPhrase = seedPhrase || ''
@@ -348,12 +448,26 @@ export class PrivacyPoolsController extends EventEmitter {
     this.resetForm()
   }
 
-  resetForm() {
+  resetForm(shouldDestroyAccountOp = true) {
+    this.selectedToken = null
     this.depositAmount = ''
     this.withdrawalAmount = ''
-    this.targetAddress = ''
-    this.selectedToken = ''
+    this.addressState = { ...DEFAULT_ADDRESS_STATE }
+    this.amountInFiat = ''
+    this.amountFieldMode = 'token'
+    this.isRecipientAddressUnknown = false
+    this.isRecipientAddressUnknownAgreed = false
+    this.latestBroadcastedToken = null
+    this.programmaticUpdateCounter = 0
+    this.validationFormMsgs = {
+      amount: { success: true, message: '' },
+      recipientAddress: { success: true, message: '' }
+    }
     this.#isInitialized = false
+
+    if (shouldDestroyAccountOp) {
+      this.destroySignAccountOp()
+    }
 
     this.emitUpdate()
   }
@@ -503,8 +617,53 @@ export class PrivacyPoolsController extends EventEmitter {
     return this.#initialPromiseLoaded
   }
 
+  get selectedToken() {
+    return this.#selectedToken
+  }
+
+  set selectedToken(token: any) {
+    if (!token) {
+      this.#selectedToken = null
+      this.withdrawalAmount = ''
+      this.amountInFiat = ''
+      this.amountFieldMode = 'token'
+      return
+    }
+
+    const prevSelectedToken = { ...this.selectedToken }
+
+    this.#selectedToken = token
+
+    // Reset amounts when token changes
+    if (
+      prevSelectedToken?.address !== token?.address ||
+      prevSelectedToken?.chainId !== token?.chainId
+    ) {
+      if (!token.priceIn?.length) {
+        this.amountFieldMode = 'token'
+      }
+      this.withdrawalAmount = ''
+      this.amountInFiat = ''
+    }
+  }
+
+  get maxAmount(): string {
+    if (
+      !this.selectedToken ||
+      getTokenAmount(this.selectedToken) === 0n ||
+      typeof this.selectedToken.decimals !== 'number'
+    )
+      return '0'
+
+    return formatUnits(getTokenAmount(this.selectedToken), this.selectedToken.decimals)
+  }
+
   get hasPersistedState() {
-    return !!(this.depositAmount || this.withdrawalAmount || this.targetAddress)
+    return !!(this.depositAmount || this.withdrawalAmount || this.addressState.fieldValue)
+  }
+
+  get recipientAddress() {
+    return this.addressState.ensAddress || this.addressState.fieldValue
   }
 
   toJSON() {
@@ -513,7 +672,10 @@ export class PrivacyPoolsController extends EventEmitter {
       ...super.toJSON(),
       isInitialized: this.isInitialized,
       initialPromiseLoaded: this.initialPromiseLoaded,
-      hasPersistedState: this.hasPersistedState
+      hasPersistedState: this.hasPersistedState,
+      selectedToken: this.selectedToken,
+      maxAmount: this.maxAmount,
+      recipientAddress: this.recipientAddress
     }
   }
 }
