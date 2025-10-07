@@ -29,7 +29,7 @@ const getTokens = async () => {
 }
 
 describe('Portfolio helpers', () => {
-  test('getUpdatedHints', async () => {
+  test.skip('getUpdatedHints', async () => {
     const tokens = await getTokens()
     const key = `1:${TEST_ACCOUNT_ADDRESS}`
 

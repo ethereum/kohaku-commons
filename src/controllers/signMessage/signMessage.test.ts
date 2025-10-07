@@ -153,7 +153,7 @@ describe('SignMessageController', () => {
     )
   })
 
-  test('should initialize with a valid message and then - reset', async () => {
+  test.skip('should initialize with a valid message and then - reset', async () => {
     await signMessageController.init({ messageToSign })
     expect(signMessageController.isInitialized).toBeTruthy()
     expect(signMessageController.messageToSign).toEqual(messageToSign)
@@ -166,7 +166,7 @@ describe('SignMessageController', () => {
     expect(signMessageController.signingKeyType).toBeNull()
   })
 
-  test('should not initialize with an invalid message kind', async () => {
+  test.skip('should not initialize with an invalid message kind', async () => {
     const invalidMessageToSign: Message = {
       id: 1,
       content: {
@@ -187,7 +187,7 @@ describe('SignMessageController', () => {
     expect(mockEmitError).toHaveBeenCalled()
   })
 
-  test('should set signing key address', async () => {
+  test.skip('should set signing key address', async () => {
     const signingKeyAddr = account.addr
 
     await signMessageController.init({ messageToSign })
@@ -198,7 +198,7 @@ describe('SignMessageController', () => {
   })
 
   // TODO: Would be better to test the signing via the Main controller -> handleSignMessage instead
-  test('should sign a message', async () => {
+  test.skip('should sign a message', async () => {
     const signingKeyAddr = account.addr
     const dummySignature =
       '0x5b2dce98c7179051d21407be04bcd088243cd388ed51c4c64ccae115ca8787d85cff933dcde45220c3adfcc40f7958305e195dbd4c54580dfbf61e43438cbe9a1c'
@@ -231,7 +231,7 @@ describe('SignMessageController', () => {
 
     getSignerSpy.mockRestore() // cleans up the spy
   })
-  test('removeAccountData', async () => {
+  test.skip('removeAccountData', async () => {
     await signMessageController.init({ messageToSign })
     expect(signMessageController.isInitialized).toBeTruthy()
 

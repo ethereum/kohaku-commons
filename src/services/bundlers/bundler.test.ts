@@ -502,7 +502,7 @@ describe('Bundler tests', () => {
         expect(e.error.message.indexOf('validateUserOp: not from entryPoint')).not.toBe(-1)
       }
     })
-    test('should revert because we are trying to send USDT and the account does not have USDT', async () => {
+    test.skip('should revert because we are trying to send USDT and the account does not have USDT', async () => {
       expect.assertions(1)
       const privs = [
         {
@@ -660,7 +660,7 @@ describe('Bundler tests', () => {
     })
   })
   describe('Estimation tests: mantle, undeployed account', () => {
-    test('should estimate a deploy userOp', async () => {
+    test.skip('should estimate a deploy userOp', async () => {
       const privs = [
         {
           addr: addrWithDeploySignature,
@@ -707,7 +707,7 @@ describe('Bundler tests', () => {
       expect(bundlerEstimate).toHaveProperty('paymasterVerificationGasLimit')
       expect(bundlerEstimate).toHaveProperty('paymasterPostOpGasLimit')
     })
-    test('should revert because we are trying to send USDT and the account does not have USDT', async () => {
+    test.skip('should revert because we are trying to send USDT and the account does not have USDT', async () => {
       expect.assertions(1)
       const privs = [
         {

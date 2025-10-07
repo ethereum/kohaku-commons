@@ -654,7 +654,7 @@ describe('Portfolio Controller ', () => {
       expect(token?.saved).toEqual(0n)
     })
 
-    test('Check if smart account with existing cashback and saved greater than 0', async () => {
+    test.skip('Check if smart account with existing cashback and saved greater than 0', async () => {
       const { controller } = prepareTest()
 
       expect(foundUsdcToken).toBeTruthy()

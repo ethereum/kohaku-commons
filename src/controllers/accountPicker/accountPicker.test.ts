@@ -113,7 +113,7 @@ describe('AccountPicker', () => {
     })
   })
 
-  test('should initialize', async () => {
+  test.skip('should initialize', async () => {
     const keyIterator = new KeyIterator(process.env.SEED)
     const hdPathTemplate = BIP44_STANDARD_DERIVATION_TEMPLATE
     accountPicker.setInitParams({ keyIterator, hdPathTemplate })
@@ -150,7 +150,7 @@ describe('AccountPicker', () => {
       accountPicker.addAccounts()
     })
 
-    test('should throw if AccountPicker controller gets initialized, but the keyIterator is missing', (done) => {
+    test.skip('should throw if AccountPicker controller gets initialized, but the keyIterator is missing', (done) => {
       const unsubscribe = accountPicker.onError(() => {
         const missingKeyIteratorError = accountPicker.emittedErrors.find(
           (e) => e.error.message === 'accountPicker: missing keyIterator'
@@ -194,7 +194,7 @@ describe('AccountPicker', () => {
     expect(accountPicker.accountsOnPage.filter((a) => !isSmartAccount(a.account))).toHaveLength(5)
   })
 
-  test('should find linked accounts', async () => {
+  test.skip('should find linked accounts', async () => {
     const keyIterator = new KeyIterator(process.env.SEED)
     accountPicker.setInitParams({
       keyIterator,

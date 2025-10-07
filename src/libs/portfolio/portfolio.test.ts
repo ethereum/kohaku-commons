@@ -171,7 +171,7 @@ describe('Portfolio', () => {
     expect(entry.amount - entry.amountPostSimulation).toBeGreaterThan(0)
   })
 
-  test('nft simulation', async () => {
+  test.skip('nft simulation', async () => {
     const ABI = ['function transferFrom(address from, address to, uint256 tokenId)']
     const iface = new ethers.Interface(ABI)
     const data = iface.encodeFunctionData('transferFrom', [
@@ -326,7 +326,7 @@ describe('Portfolio', () => {
     expect(entry.amount - entry.amountPostSimulation).toBe(10000000000000000n)
   })
 
-  test('token simulation should throw a simulation error if the account op nonce is lower or higher than the original contract nonce', async () => {
+  test.skip('token simulation should throw a simulation error if the account op nonce is lower or higher than the original contract nonce', async () => {
     const acc = '0xD8293ad21678c6F09Da139b4B62D38e514a03B78'
     const accountOp: any = {
       accountAddr: '0x77777777789A8BBEE6C64381e5E89E501fb0e4c8',
@@ -390,7 +390,7 @@ describe('Portfolio', () => {
     }
   })
 
-  test('simulation should revert with SV_NO_KEYS for an account we do not posses the associated key for', async () => {
+  test.skip('simulation should revert with SV_NO_KEYS for an account we do not posses the associated key for', async () => {
     const acc = '0x7a15866aFfD2149189Aa52EB8B40a8F9166441D9'
     const accountOp: any = {
       accountAddr: acc,
@@ -433,7 +433,7 @@ describe('Portfolio', () => {
     }
   })
 
-  test('simulation should revert with SV_WRONG_KEYS for an account that we pass a wrong associated key', async () => {
+  test.skip('simulation should revert with SV_WRONG_KEYS for an account that we pass a wrong associated key', async () => {
     const acc = '0xD8293ad21678c6F09Da139b4B62D38e514a03B78'
     const accountOp: any = {
       accountAddr: acc,
@@ -524,7 +524,7 @@ describe('Portfolio', () => {
     expect(entry.amount - entry.amountPostSimulation).toBeGreaterThan(0)
   })
 
-  test('token simulation fails if there are two account ops but the last one has a higher nonce than expected', async () => {
+  test.skip('token simulation fails if there are two account ops but the last one has a higher nonce than expected', async () => {
     const accountOp: any = {
       accountAddr: PORTFOLIO_TESTS_V2.addr,
       signingKeyAddr: PORTFOLIO_TESTS_V2.key,

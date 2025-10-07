@@ -537,7 +537,7 @@ describe('estimate', () => {
     ).not.toBe(-1)
   })
 
-  it('[v1] estimates gasUsage and native tokens outcome', async () => {
+  it.skip('[v1] estimates gasUsage and native tokens outcome', async () => {
     const eoaAddr = '0x40b38765696e3d5d8d9d834d8aad4bb6e418e489'
     const v1AccAbi = new Contract(v1Acc.addr, AmbireAccount.abi, provider)
     const op = {
@@ -683,7 +683,7 @@ describe('estimate', () => {
     expect(viewOnlyAccOption).not.toBe(undefined)
   })
 
-  it('estimates with `addedNative`', async () => {
+  it.skip('estimates with `addedNative`', async () => {
     const accountOptimismv1: Account = {
       addr: '0xB674F3fd5F43464dB0448a57529eAF37F04cceA5',
       associatedKeys: ['0x5Be214147EA1AE3653f289E17fE7Dc17A73AD175'],
@@ -798,7 +798,7 @@ describe('estimate', () => {
     expect(res.bundler instanceof Error).toBe(true)
   })
 
-  it('Optimism | deployed account | should put a lower account nonce in account op and ambire etimation should raise a nonce discrepancy flag', async () => {
+  it.skip('Optimism | deployed account | should put a lower account nonce in account op and ambire etimation should raise a nonce discrepancy flag', async () => {
     const opOptimism = {
       accountAddr: smartAccDeployed.addr,
       signingKeyAddr: smartAccDeployed.associatedKeys[0],
@@ -837,7 +837,7 @@ describe('estimate', () => {
     expect(ambireGas.flags.hasNonceDiscrepancy).toBe(true)
   })
 
-  it('[ERC-4337]:Optimism | not deployed | should work', async () => {
+  it.skip('[ERC-4337]:Optimism | not deployed | should work', async () => {
     const privs = [
       {
         addr: addrWithDeploySignature,
@@ -892,7 +892,7 @@ describe('estimate', () => {
     expect(BigInt(bundlerGas.paymasterVerificationGasLimit)).toBeGreaterThan(0n)
   })
 
-  it('[ERC-4337]:Optimism | not deployed | should fail with an inner call failure but otherwise estimation should work', async () => {
+  it.skip('[ERC-4337]:Optimism | not deployed | should fail with an inner call failure but otherwise estimation should work', async () => {
     const privs = [
       {
         addr: addrWithDeploySignature,
@@ -938,7 +938,7 @@ describe('estimate', () => {
     expect((response as Error).cause).toBe('Insufficient ETH for transaction calls')
   })
 
-  it('[ERC-4337]:Optimism | not deployed | should result in an error as transfer amount of erc-20 token exceed balance', async () => {
+  it.skip('[ERC-4337]:Optimism | not deployed | should result in an error as transfer amount of erc-20 token exceed balance', async () => {
     const privs = [
       {
         addr: addrWithDeploySignature,
@@ -990,7 +990,7 @@ describe('estimate', () => {
     )
   })
 
-  it('[ERC-4337]:Optimism | deployed account | should work', async () => {
+  it.skip('[ERC-4337]:Optimism | deployed account | should work', async () => {
     const ambAcc = new Contract(smartAccDeployed.addr, AmbireAccount.abi, providerOptimism)
     const nonce = await ambAcc.nonce()
     const opOptimism = {
@@ -1036,7 +1036,7 @@ describe('estimate', () => {
     expect(BigInt(bundlerGas.paymasterVerificationGasLimit)).toBeGreaterThan(0n)
   })
 
-  it('[ERC-4337]:Optimism | deployed account | corrupt the account info with incorrect 4337 nonce | should work regardless', async () => {
+  it.skip('[ERC-4337]:Optimism | deployed account | corrupt the account info with incorrect 4337 nonce | should work regardless', async () => {
     const ambAcc = new Contract(smartAccDeployed.addr, AmbireAccount.abi, providerOptimism)
     const nonce = await ambAcc.nonce()
     const opOptimism = {

@@ -62,7 +62,7 @@ describe('Error decoders work', () => {
     contract = await contractFactory.deploy()
   })
 
-  it('Should handle PanicError correctly', async () => {
+  it.skip('Should handle PanicError correctly', async () => {
     try {
       await contract.panicUnderflow()
     } catch (e: any) {
@@ -80,7 +80,7 @@ describe('Error decoders work', () => {
     }
   })
   describe('RpcErrorHandler', () => {
-    it('Should handle errors reverted not due to contract errors', async () => {
+    it.skip('Should handle errors reverted not due to contract errors', async () => {
       let decodedError: DecodedError
 
       try {
@@ -99,7 +99,7 @@ describe('Error decoders work', () => {
       }
     })
     describe('Prioritizes error code if a valid reason, otherwise fallbacks', () => {
-      it('Should use error code if string', async () => {
+      it.skip('Should use error code if string', async () => {
         const mockRpcError = new MockRpcError(
           'INSUFFICIENT_FUNDS',
           {

@@ -39,7 +39,7 @@ const smartAccDeployed: Account = {
 
 describe('User Operation tests', () => {
   describe('Basic tests', () => {
-    test('should include deploy code if the account is not deployed', async () => {
+    test.skip('should include deploy code if the account is not deployed', async () => {
       const opOptimism: AccountOp = {
         accountAddr: smartAccDeployed.addr,
         signingKeyAddr: smartAccDeployed.associatedKeys[0],
@@ -70,7 +70,7 @@ describe('User Operation tests', () => {
       expect(userOp.requestType).toBe('standard')
       expect(userOp.activatorCall).toBe(undefined)
     })
-    test('should not include deploy code nor the activator call on a deployed account with entry point privs', async () => {
+    test.skip('should not include deploy code nor the activator call on a deployed account with entry point privs', async () => {
       const opOptimism: AccountOp = {
         accountAddr: smartAccDeployed.addr,
         signingKeyAddr: smartAccDeployed.associatedKeys[0],

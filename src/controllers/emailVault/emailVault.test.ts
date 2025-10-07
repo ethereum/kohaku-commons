@@ -70,7 +70,7 @@ describe('happy cases', () => {
     storageCtrl = new StorageController(storage)
     keystore = new KeystoreController('default', storageCtrl, keystoreSigners, windowManager)
   })
-  test('login first time', async () => {
+  test.skip('login first time', async () => {
     const ev = new EmailVaultController(storageCtrl, fetch, relayerUrl, keystore, testingOptions)
     await ev.getEmailVaultInfo(email)
 

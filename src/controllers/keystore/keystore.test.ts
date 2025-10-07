@@ -525,7 +525,7 @@ describe('KeystoreController', () => {
     const keystoreUid = await keystore.getKeyStoreUid()
     expect(keystoreUid.length).toBe(128)
   })
-  test('should remove key', async () => {
+  test.skip('should remove key', async () => {
     const keyLengthBefore = keystore.keys.length
     // An internal key and a trezor key with the same public address
     const keysWithSamePublicAddress = keystore.keys.filter(

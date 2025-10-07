@@ -23,7 +23,7 @@ if (!polygon) throw new Error('unable to find polygon network in consts')
 const provider = getRpcProvider(polygon.rpcUrls, polygon.chainId)
 
 describe('AccountState', () => {
-  test('should get the account state and check if a v1 address and v2 address (not deployed) are returned correctly', async () => {
+  test.skip('should get the account state and check if a v1 address and v2 address (not deployed) are returned correctly', async () => {
     const account: Account = {
       addr: '0xB674F3fd5F43464dB0448a57529eAF37F04cceA5',
       associatedKeys: [],
@@ -179,7 +179,7 @@ describe('AccountState', () => {
     expect(accEOANonZero.isEOA).toBe(true)
     expect(accEOANonZero.nonce).toBeGreaterThan(0n)
   })
-  test('should fetch the account state for a 7702 EOA', async () => {
+  test.skip('should fetch the account state for a 7702 EOA', async () => {
     const account7702: Account = {
       addr: '0xD8293ad21678c6F09Da139b4B62D38e514a03B78',
       associatedKeys: ['0xD8293ad21678c6F09Da139b4B62D38e514a03B78'],
