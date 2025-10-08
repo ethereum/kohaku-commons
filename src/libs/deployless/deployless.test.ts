@@ -11,7 +11,10 @@ const helloWorld = compile('HelloWorld', {
   contractsFolder: 'test/contracts'
 })
 const deployErrBin = '0x6080604052348015600f57600080fd5b600080fdfe'
-const mainnetProvider = getRpcProvider(['https://invictus.ambire.com/ethereum'], 1n)
+const mainnetProvider = getRpcProvider({
+  rpcUrls: ['https://invictus.ambire.com/ethereum'],
+  chainId: 1n
+})
 let deployless: Deployless
 
 describe('Deployless', () => {

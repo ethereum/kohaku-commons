@@ -10,7 +10,7 @@ export async function getBytecode(priLevels: PrivLevels[]): Promise<string> {
   })
 }
 export async function get4437Bytecode(network: Network, priLevels: PrivLevels[]): Promise<string> {
-  const provider = getRpcProvider(network.rpcUrls, network.chainId)
+  const provider = getRpcProvider(network)
   const code = await provider.getCode(PROXY_AMBIRE_4337_ACCOUNT)
   if (code === '0x') throw new Error('No proxy ambire account mined for the specified network')
 

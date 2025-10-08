@@ -47,7 +47,7 @@ import { FeeSpeed, SigningStatus } from './signAccountOp'
 import { SignAccountOpTesterController } from './signAccountOpTester'
 
 const providers = Object.fromEntries(
-  networks.map((network) => [network.chainId, getRpcProvider(network.rpcUrls, network.chainId)])
+  networks.map((network) => [network.chainId, getRpcProvider(network)])
 )
 
 const createEOAAccountOp = (account: Account) => {
@@ -414,7 +414,7 @@ const init = async (
   const { op } = accountOp
   const network = networksCtrl.networks.find((x) => x.chainId === op.chainId)!
   await portfolio.updateSelectedAccount(account.addr, updateWholePortfolio ? undefined : [network])
-  const provider = getRpcProvider(network.rpcUrls, network.chainId)
+  const provider = getRpcProvider(network)
 
   if (portfolio.getLatestPortfolioState(account.addr)[op.chainId.toString()]!.result) {
     portfolio!.getLatestPortfolioState(account.addr)[op.chainId.toString()]!.result!.tokens = [

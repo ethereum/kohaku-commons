@@ -110,7 +110,7 @@ const SIGNED_MESSAGE: SignedMessage = {
 const providers: RPCProviders = {}
 
 networks.forEach((network) => {
-  providers[network.chainId.toString()] = getRpcProvider(network.rpcUrls, network.chainId)
+  providers[network.chainId.toString()] = getRpcProvider(network)
   providers[network.chainId.toString()].isWorking = true
 })
 

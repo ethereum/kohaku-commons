@@ -13,8 +13,7 @@ const scheduledActions: {
 } = {}
 
 export async function executeBatchedFetch(network: Network): Promise<void> {
-  const rpcUrl = network.selectedRpcUrl || network.rpcUrls[0]
-  const provider = getRpcProvider([rpcUrl], network.chainId)
+  const provider = getRpcProvider(network)
   const allAddresses =
     Array.from(new Set(scheduledActions[network.chainId.toString()]?.data.map((i) => i.address))) ||
     []

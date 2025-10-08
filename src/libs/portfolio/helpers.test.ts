@@ -13,7 +13,7 @@ const polygon = networks.find((x) => x.chainId === 137n)
 
 if (!ethereum || !polygon) throw new Error('Failed to find ethereum in networks')
 
-const provider = getRpcProvider(ethereum.rpcUrls, ethereum.chainId)
+const provider = getRpcProvider(ethereum)
 
 const ethPortfolio = new Portfolio(fetch, provider, ethereum, velcroUrl)
 
