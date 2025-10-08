@@ -29,7 +29,7 @@ const EMPTY_ACCOUNT_ADDR = '0xA098B9BccaDd9BAEc311c07433e94C9d260CbC07'
 const providers: RPCProviders = {}
 
 networks.forEach((network) => {
-  providers[network.chainId.toString()] = getRpcProvider(network.rpcUrls, network.chainId)
+  providers[network.chainId.toString()] = getRpcProvider(network)
   providers[network.chainId.toString()].isWorking = true
 })
 

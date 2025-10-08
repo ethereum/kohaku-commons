@@ -54,7 +54,7 @@ describe('User Operation tests', () => {
       }
       const usedNetworks = [optimism]
       const providers = {
-        [optimism.chainId.toString()]: getRpcProvider(optimism.rpcUrls, optimism.chainId)
+        [optimism.chainId.toString()]: getRpcProvider(optimism)
       }
       const accountStates = await getAccountsInfo(usedNetworks, providers, [smartAccDeployed])
       accountStates[smartAccDeployed.addr][optimism.chainId.toString()].isDeployed = false
@@ -85,7 +85,7 @@ describe('User Operation tests', () => {
       }
       const usedNetworks = [optimism]
       const providers = {
-        [optimism.chainId.toString()]: getRpcProvider(optimism.rpcUrls, optimism.chainId)
+        [optimism.chainId.toString()]: getRpcProvider(optimism)
       }
       const accountStates = await getAccountsInfo(usedNetworks, providers, [smartAccDeployed])
       const userOp = getUserOperation(
@@ -114,7 +114,7 @@ describe('User Operation tests', () => {
       }
       const usedNetworks = [optimism]
       const providers = {
-        [optimism.chainId.toString()]: getRpcProvider(optimism.rpcUrls, optimism.chainId)
+        [optimism.chainId.toString()]: getRpcProvider(optimism)
       }
       const accountStates = await getAccountsInfo(usedNetworks, providers, [smartAccDeployed])
       accountStates[smartAccDeployed.addr][optimism.chainId.toString()].isErc4337Enabled = false
