@@ -256,7 +256,7 @@ describe('Bundler tests', () => {
       }
       const usedNetworks = [arbitrum]
       const providers = {
-        [arbitrum.chainId.toString()]: getRpcProvider(arbitrum.rpcUrls, arbitrum.chainId)
+        [arbitrum.chainId.toString()]: getRpcProvider(arbitrum)
       }
       const accountStates = await getAccountsInfo(usedNetworks, providers, [smartAccNew])
       const accountState = accountStates[opArb.accountAddr][opArb.chainId.toString()]
@@ -302,7 +302,7 @@ describe('Bundler tests', () => {
       }
       const usedNetworks = [arbitrum]
       const providers = {
-        [arbitrum.chainId.toString()]: getRpcProvider(arbitrum.rpcUrls, arbitrum.chainId)
+        [arbitrum.chainId.toString()]: getRpcProvider(arbitrum)
       }
       const accountStates = await getAccountsInfo(usedNetworks, providers, [smartAccNew])
       const accountState = accountStates[opArb.accountAddr][opArb.chainId.toString()]
@@ -361,7 +361,7 @@ describe('Bundler tests', () => {
       }
       const usedNetworks = [arbitrum]
       const providers = {
-        [arbitrum.chainId.toString()]: getRpcProvider(arbitrum.rpcUrls, arbitrum.chainId)
+        [arbitrum.chainId.toString()]: getRpcProvider(arbitrum)
       }
       const accountStates = await getAccountsInfo(usedNetworks, providers, [smartAccNew])
       const accountState = accountStates[opArb.accountAddr][opArb.chainId.toString()]
@@ -412,7 +412,7 @@ describe('Bundler tests', () => {
       }
       const usedNetworks = [optimism]
       const providers = {
-        [optimism.chainId.toString()]: getRpcProvider(optimism.rpcUrls, optimism.chainId)
+        [optimism.chainId.toString()]: getRpcProvider(optimism)
       }
       const accountStates = await getAccountsInfo(usedNetworks, providers, [smartAcc])
       const accountState = accountStates[opOptimism.accountAddr][opOptimism.chainId.toString()]
@@ -469,7 +469,7 @@ describe('Bundler tests', () => {
       }
       const usedNetworks = [optimism]
       const providers = {
-        [optimism.chainId.toString()]: getRpcProvider(optimism.rpcUrls, optimism.chainId)
+        [optimism.chainId.toString()]: getRpcProvider(optimism)
       }
       const accountStates = await getAccountsInfo(usedNetworks, providers, [smartAcc])
       const accountState = accountStates[opOptimism.accountAddr][opOptimism.chainId.toString()]
@@ -535,7 +535,7 @@ describe('Bundler tests', () => {
       }
       const usedNetworks = [optimism]
       const providers = {
-        [optimism.chainId.toString()]: getRpcProvider(optimism.rpcUrls, optimism.chainId)
+        [optimism.chainId.toString()]: getRpcProvider(optimism)
       }
       const accountStates = await getAccountsInfo(usedNetworks, providers, [smartAcc])
       const accountState = accountStates[opOptimism.accountAddr][opOptimism.chainId.toString()]
@@ -584,7 +584,7 @@ describe('Bundler tests', () => {
       }
       const usedNetworks = [baseSepolia]
       const providers = {
-        [baseSepolia.chainId.toString()]: getRpcProvider(baseSepolia.rpcUrls, baseSepolia.chainId)
+        [baseSepolia.chainId.toString()]: getRpcProvider(baseSepolia)
       }
       const accountStates = await getAccountsInfo(usedNetworks, providers, [
         smartAccDeployedOnGnosisButNo4337
@@ -629,7 +629,7 @@ describe('Bundler tests', () => {
       }
       const usedNetworks = [gnosis]
       const providers = {
-        [gnosis.chainId.toString()]: getRpcProvider(gnosis.rpcUrls, gnosis.chainId)
+        [gnosis.chainId.toString()]: getRpcProvider(gnosis)
       }
       const accountStates = await getAccountsInfo(usedNetworks, providers, [
         smartAccDeployedOnGnosisButNo4337
@@ -682,7 +682,7 @@ describe('Bundler tests', () => {
       }
       const usedNetworks = [mantle]
       const providers = {
-        [mantle.chainId.toString()]: getRpcProvider(mantle.rpcUrls, mantle.chainId)
+        [mantle.chainId.toString()]: getRpcProvider(mantle)
       }
       const accountStates = await getAccountsInfo(usedNetworks, providers, [smartAcc])
       const accountState = accountStates[opMantle.accountAddr][opMantle.chainId.toString()]
@@ -739,7 +739,7 @@ describe('Bundler tests', () => {
       }
       const usedNetworks = [mantle]
       const providers = {
-        [mantle.chainId.toString()]: getRpcProvider(mantle.rpcUrls, mantle.chainId)
+        [mantle.chainId.toString()]: getRpcProvider(mantle)
       }
       const accountStates = await getAccountsInfo(usedNetworks, providers, [smartAcc])
       const accountState = accountStates[opMantle.accountAddr][opMantle.chainId.toString()]
@@ -795,7 +795,7 @@ describe('Bundler tests', () => {
       }
       const usedNetworks = [base]
       const providers = {
-        [base.chainId.toString()]: getRpcProvider(base.rpcUrls, base.chainId)
+        [base.chainId.toString()]: getRpcProvider(base)
       }
       const accountStates = await getAccountsInfo(usedNetworks, providers, [smartAcc])
       const accountState = accountStates[opBase.accountAddr][opBase.chainId.toString()]
@@ -845,7 +845,7 @@ describe('Bundler tests', () => {
       }
       const usedNetworks = [base]
       const providers = {
-        [base.chainId.toString()]: getRpcProvider(base.rpcUrls, base.chainId)
+        [base.chainId.toString()]: getRpcProvider(base)
       }
       const accountStates = await getAccountsInfo(usedNetworks, providers, [smartAccDeployed])
       const accountState = accountStates[opBase.accountAddr][opBase.chainId.toString()]

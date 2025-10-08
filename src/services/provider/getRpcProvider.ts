@@ -1,26 +1,21 @@
-import { Network } from 'ethers'
+import { JsonRpcProvider, Network } from 'ethers'
 
-import { Network as NetworkInterface } from '../../interfaces/network'
+import { Network as NetworkConfig } from '../../interfaces/network'
 import { HeliosEthersProvider } from './HeliosEthersProvider'
 
-interface ProviderOptions {
-  batchMaxCount: number
+export type MinNetworkConfig = Partial<NetworkConfig> & {
+  rpcUrls: string[]
 }
 
-const getRpcProvider = (
-  rpcUrls: NetworkInterface['rpcUrls'],
-  chainId?: bigint | number,
-  selectedRpcUrl?: string,
-  options?: ProviderOptions
-) => {
-  if (!rpcUrls.length) {
+const getRpcProvider = (config: MinNetworkConfig) => {
+  if (!config.rpcUrls.length) {
     throw new Error('rpcUrls must be a non-empty array')
   }
 
-  let rpcUrl = rpcUrls[0]
+  let rpcUrl = config.rpcUrls[0]
 
-  if (selectedRpcUrl) {
-    const prefUrl = rpcUrls.find((u) => u === selectedRpcUrl)
+  if (config.selectedRpcUrl) {
+    const prefUrl = config.rpcUrls.find((u) => u === config.selectedRpcUrl)
     if (prefUrl) rpcUrl = prefUrl
   }
 
@@ -28,17 +23,20 @@ const getRpcProvider = (
     throw new Error('Invalid RPC URL provided')
   }
 
-  if (chainId) {
-    const staticNetwork = Network.from(Number(chainId))
+  let staticNetwork: Network | undefined
 
-    if (staticNetwork) {
-      // return new JsonRpcProvider(rpcUrl, staticNetwork, { staticNetwork, ...options })
-      return new HeliosEthersProvider(rpcUrl, staticNetwork)
-    }
+  if (config.chainId) {
+    staticNetwork = Network.from(Number(config.chainId))
   }
 
-  // return new JsonRpcProvider(rpcUrl)
-  return new HeliosEthersProvider(rpcUrl)
+  if (config.consensusRpcUrl) {
+    return new HeliosEthersProvider(config, rpcUrl, staticNetwork)
+  }
+
+  return new JsonRpcProvider(rpcUrl, staticNetwork, {
+    staticNetwork,
+    batchMaxCount: config.batchMaxCount
+  })
 }
 
 export { getRpcProvider }

@@ -62,7 +62,7 @@ const MOCK_ACCOUNTS: Account[] = [
 storage.set('accounts', MOCK_ACCOUNTS)
 
 const providers = Object.fromEntries(
-  networks.map((network) => [network.chainId, getRpcProvider(network.rpcUrls, network.chainId)])
+  networks.map((network) => [network.chainId, getRpcProvider(network)])
 )
 
 describe('AddressBookController', () => {

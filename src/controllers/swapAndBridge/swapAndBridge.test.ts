@@ -71,7 +71,7 @@ const notificationManager = {
 }
 
 const providers = Object.fromEntries(
-  networks.map((network) => [network.chainId, getRpcProvider(network.rpcUrls, network.chainId)])
+  networks.map((network) => [network.chainId, getRpcProvider(network)])
 )
 
 const storage: Storage = produceMemoryStore()

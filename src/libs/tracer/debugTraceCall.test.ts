@@ -16,7 +16,10 @@ const ACCOUNT_ADDRESS = '0x46C0C59591EbbD9b7994d10efF172bFB9325E240'
 
 // @TODO add minting and burning test
 describe('Debug tracecall detection for transactions', () => {
-  const provider = getRpcProvider(['https://invictus.ambire.com/optimism'], 10n)
+  const provider = getRpcProvider({
+    rpcUrls: ['https://invictus.ambire.com/optimism'],
+    chainId: 10n
+  })
   let account: Account
   let accountOp: AccountOp
   const nftIface: Interface = new Interface(ERC721)
