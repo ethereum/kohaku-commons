@@ -26,6 +26,8 @@ import {
 } from '../../utils/numbers/formatters'
 import { getAppSecret, getEip712Payload } from './derivation'
 import wait from '../../utils/wait'
+import { relayerCall } from '../../libs/relayerCall/relayerCall'
+import { Fetch } from '../../interfaces/fetch'
 
 const HARD_CODED_CURRENCY = 'usd'
 
@@ -47,6 +49,42 @@ type PoolInfo = {
   address: Hex
   scope: Hash
   deploymentBlock: bigint
+}
+
+export type BatchWithdrawalProof = {
+  pA: [bigint, bigint]
+  pB: [readonly [bigint, bigint], readonly [bigint, bigint]]
+  pC: [bigint, bigint]
+  pubSignals: bigint[]
+}
+
+export type TransformedProof = {
+  publicSignals: bigint[]
+  proof: {
+    pi_a: [bigint, bigint]
+    pi_b: [readonly [bigint, bigint], readonly [bigint, bigint]]
+    pi_c: [bigint, bigint]
+  }
+}
+
+export type BatchWithdrawalParams = {
+  chainId: number
+  poolAddress: string
+  withdrawal: {
+    processooor: string
+    data: string
+  }
+  proofs: TransformedProof[]
+}
+
+export type BatchWithdrawalResponse = {
+  success: boolean
+  data?: {
+    txId: string
+    relayerId: string
+    estimatedConfirmation?: number
+  }
+  message?: string
 }
 
 const DEFAULT_ADDRESS_STATE = {
@@ -89,6 +127,12 @@ export class PrivacyPoolsController extends EventEmitter {
   #externalSignerControllers: ExternalSignerControllers
 
   #relayerUrl: string
+
+  #privacyPoolsRelayerUrl: string
+
+  #callRelayer: Function
+
+  #fetch: Fetch
 
   shouldTrackLatestBroadcastedAccountOp: boolean = true
 
@@ -152,7 +196,9 @@ export class PrivacyPoolsController extends EventEmitter {
     externalSignerControllers: ExternalSignerControllers,
     relayerUrl: string,
     privacyPoolsAspUrl: string,
-    alchemyApiKey: string
+    privacyPoolsRelayerUrl: string,
+    alchemyApiKey: string,
+    fetch: Fetch
   ) {
     super()
 
@@ -169,6 +215,11 @@ export class PrivacyPoolsController extends EventEmitter {
     this.#activity = activity
     this.#externalSignerControllers = externalSignerControllers
     this.#relayerUrl = relayerUrl
+    this.#privacyPoolsRelayerUrl = privacyPoolsRelayerUrl
+    this.#fetch = fetch
+
+    // Bind relayer call function
+    this.#callRelayer = relayerCall.bind({ url: privacyPoolsRelayerUrl, fetch })
 
     this.#initialPromise = this.#load()
 
@@ -603,6 +654,68 @@ export class PrivacyPoolsController extends EventEmitter {
     }
 
     loop()
+  }
+
+  /**
+   * Submit batch withdrawal to relayer API
+   * This method sends the batch withdrawal proofs to the relayer endpoint
+   * instead of directly encoding and broadcasting the transaction
+   */
+  async submitBatchWithdrawal(params: BatchWithdrawalParams): Promise<BatchWithdrawalResponse> {
+    try {
+      console.log('DEBUG: calling Submit Batch Withdrawal', this.#privacyPoolsRelayerUrl)
+
+      // Convert all bigint values to strings for JSON serialization
+      const serializedParams = {
+        ...params,
+        proofs: params.proofs.map((proof) => ({
+          publicSignals: proof.publicSignals.map((signal) => signal.toString()),
+          proof: {
+            pi_a: [proof.proof.pi_a[0].toString(), proof.proof.pi_a[1].toString()],
+            pi_b: [
+              [proof.proof.pi_b[0][0].toString(), proof.proof.pi_b[0][1].toString()],
+              [proof.proof.pi_b[1][0].toString(), proof.proof.pi_b[1][1].toString()]
+            ],
+            pi_c: [proof.proof.pi_c[0].toString(), proof.proof.pi_c[1].toString()]
+          }
+        }))
+      }
+
+      console.log('DEBUG: serializedParams', serializedParams)
+
+      const response = await this.#callRelayer('/relayer/batch/request', 'POST', serializedParams, {
+        'Content-Type': 'application/json'
+      })
+
+      console.log('DEBUG: response', response)
+
+      if (!response.success) {
+        throw new Error(response.message || 'Batch withdrawal submission failed')
+      }
+
+      return {
+        success: true,
+        data: {
+          txId: response.data?.txId || response.txId,
+          relayerId: response.data?.relayerId || response.id,
+          estimatedConfirmation: response.data?.estimatedConfirmation
+        }
+      }
+    } catch (error) {
+      const errorMessage =
+        error instanceof Error ? error.message : 'Failed to submit batch withdrawal to relayer'
+
+      this.emitError({
+        level: 'major',
+        message: errorMessage,
+        error: error instanceof Error ? error : new Error(errorMessage)
+      })
+
+      return {
+        success: false,
+        message: errorMessage
+      }
+    }
   }
 
   get isInitialized(): boolean {
