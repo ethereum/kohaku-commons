@@ -1,3 +1,4 @@
+/* eslint-disable no-console */
 import { formatUnits, keccak256, parseUnits, toBytes, type Address, type Hex } from 'viem'
 import { HDNodeWallet, Mnemonic } from 'ethers'
 import type { KeystoreController } from '../keystore/keystore'
@@ -26,6 +27,7 @@ import {
 } from '../../utils/numbers/formatters'
 import { getAppSecret, getEip712Payload } from './derivation'
 import wait from '../../utils/wait'
+import { mnemonicFromEntropy } from './utils/mnemonicFromEntropy'
 
 const HARD_CODED_CURRENCY = 'usd'
 
@@ -102,7 +104,7 @@ export class PrivacyPoolsController extends EventEmitter {
 
   withdrawalAmount: string = ''
 
-  signedTypedData: string | null = null
+  secret: string | null = null
 
   seedPhrase: string = ''
 
@@ -538,16 +540,18 @@ export class PrivacyPoolsController extends EventEmitter {
     try {
       const appSecret = await this.#generateAppSecretInternal(appInfo)
 
-      // TODO: Encrypt before saving in this.signedTypedData
-
-      this.signedTypedData = appSecret
-      console.log('DEBUG: App secret:', appSecret)
-
+      const mnemonic = await mnemonicFromEntropy(toBytes(appSecret))
+      this.secret = mnemonic
       this.emitUpdate()
     } catch (error) {
       console.error('Failed to generate app secret:', error)
       throw error
     }
+  }
+
+  async resetSecret() {
+    this.secret = null
+    this.emitUpdate()
   }
 
   async syncSignAccountOp(calls?: Call[]) {
