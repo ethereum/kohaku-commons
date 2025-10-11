@@ -1,4 +1,12 @@
-import { formatUnits, keccak256, parseUnits, toBytes, type Address, type Hex } from 'viem'
+import {
+  formatUnits,
+  getAddress,
+  keccak256,
+  parseUnits,
+  toBytes,
+  type Address,
+  type Hex
+} from 'viem'
 import { HDNodeWallet, Mnemonic } from 'ethers'
 import type { KeystoreController } from '../keystore/keystore'
 import { type ChainData, chainData, whitelistedChains } from './config'
@@ -6,7 +14,7 @@ import EventEmitter from '../eventEmitter/eventEmitter'
 import { SignAccountOpController } from '../signAccountOp/signAccountOp'
 import { getBaseAccount } from '../../libs/account/getBaseAccount'
 import { AccountOp } from '../../libs/accountOp/accountOp'
-import { Call } from '../../libs/accountOp/types'
+import { AccountOpStatus, Call } from '../../libs/accountOp/types'
 import { KeystoreSigner } from '../../libs/keystoreSigner/keystoreSigner'
 import { getAmbirePaymasterService } from '../../libs/erc7677/erc7677'
 import { randomId } from '../../libs/humanizer/utils'
@@ -28,6 +36,7 @@ import { getAppSecret, getEip712Payload } from './derivation'
 import wait from '../../utils/wait'
 import { relayerCall } from '../../libs/relayerCall/relayerCall'
 import { Fetch } from '../../interfaces/fetch'
+import { generateUuid } from '../../utils/uuid'
 
 const HARD_CODED_CURRENCY = 'usd'
 
@@ -40,6 +49,7 @@ interface PrivacyPoolsFormUpdate {
   selectedToken?: any
   shouldSetMaxAmount?: boolean
   isRecipientAddressUnknownAgreed?: boolean
+  batchSize?: number
 }
 
 type Hash = bigint
@@ -116,6 +126,22 @@ export class PrivacyPoolsController extends EventEmitter {
 
   #reestimateAbortController: AbortController | null = null
 
+  #quoteRefetchAbortController: AbortController | null = null
+
+  #transactionPollingAbortController: AbortController | null = null
+
+  #pendingWithdrawalProof: TransformedProof[] | null = null
+
+  #pendingWithdrawalParams: {
+    chainId: number
+    poolAddress: string
+    processooor: string
+    recipient: string
+    batchSize: number
+    totalAmount: string
+    data: string
+  } | null = null
+
   #networks: NetworksController
 
   #providers: ProvidersController
@@ -133,6 +159,8 @@ export class PrivacyPoolsController extends EventEmitter {
   #callRelayer: Function
 
   #fetch: Fetch
+
+  #updateQuoteId?: string
 
   shouldTrackLatestBroadcastedAccountOp: boolean = true
 
@@ -156,6 +184,14 @@ export class PrivacyPoolsController extends EventEmitter {
 
   importedSecretNote: string = ''
 
+  updateQuoteStatus: 'INITIAL' | 'LOADING' = 'INITIAL'
+
+  relayerQuote: {
+    relayFeeBPS: number
+    feeRecipient: string
+    totalAmountWithFee: string
+  } | null = null
+
   // Transfer/Withdrawal-specific properties
   amountInFiat: string = ''
 
@@ -168,6 +204,8 @@ export class PrivacyPoolsController extends EventEmitter {
   latestBroadcastedToken: any = null
 
   programmaticUpdateCounter: number = 0
+
+  batchSize: number = 1
 
   validationFormMsgs: {
     amount: { success: boolean; message: string }
@@ -440,6 +478,17 @@ export class PrivacyPoolsController extends EventEmitter {
     }
   }
 
+  #getIsFormValidToFetchQuote() {
+    return (
+      !!this.withdrawalAmount &&
+      parseFloat(this.withdrawalAmount) > 0 &&
+      !!this.selectedToken &&
+      !!this.recipientAddress &&
+      this.validationFormMsgs.amount.success &&
+      this.validationFormMsgs.recipientAddress.success
+    )
+  }
+
   update({
     depositAmount,
     withdrawalAmount,
@@ -448,8 +497,11 @@ export class PrivacyPoolsController extends EventEmitter {
     importedSecretNote,
     selectedToken,
     shouldSetMaxAmount,
-    isRecipientAddressUnknownAgreed
+    isRecipientAddressUnknownAgreed,
+    batchSize
   }: PrivacyPoolsFormUpdate) {
+    let shouldUpdateQuote = false
+
     if (typeof depositAmount === 'string') {
       this.depositAmount = depositAmount
     }
@@ -457,6 +509,7 @@ export class PrivacyPoolsController extends EventEmitter {
     if (typeof withdrawalAmount === 'string') {
       this.withdrawalAmount = withdrawalAmount
       this.#calculateAmountInFiat(withdrawalAmount)
+      shouldUpdateQuote = true
     }
 
     if (addressState) {
@@ -464,6 +517,7 @@ export class PrivacyPoolsController extends EventEmitter {
         ...this.addressState,
         ...addressState
       }
+      shouldUpdateQuote = true
 
       // Validations if needed
       // this.#onRecipientAddressChange()
@@ -475,27 +529,183 @@ export class PrivacyPoolsController extends EventEmitter {
 
     if (selectedToken !== undefined) {
       this.selectedToken = selectedToken
+      shouldUpdateQuote = true
     }
 
     if (shouldSetMaxAmount && this.maxAmount) {
       this.withdrawalAmount = this.maxAmount
       this.#calculateAmountInFiat(this.maxAmount)
       this.programmaticUpdateCounter++
+      shouldUpdateQuote = true
     }
 
     if (typeof isRecipientAddressUnknownAgreed === 'boolean') {
       this.isRecipientAddressUnknownAgreed = isRecipientAddressUnknownAgreed
     }
 
+    if (typeof batchSize === 'number') {
+      this.batchSize = batchSize
+      shouldUpdateQuote = true
+    }
+
     this.seedPhrase = seedPhrase || ''
 
     this.emitUpdate()
+
+    // Trigger debounced quote fetch when relevant fields change
+    if (shouldUpdateQuote) {
+      // eslint-disable-next-line @typescript-eslint/no-floating-promises
+      this.updateQuote({ debounce: true })
+    }
+  }
+
+  async updateQuote(options?: { debounce?: boolean }) {
+    console.log('DEBUG: updateQuote called')
+    const { debounce = false } = options || {}
+
+    // Clear quote if form is invalid
+    if (!this.#getIsFormValidToFetchQuote()) {
+      console.log('DEBUG: Form is invalid, clearing quote')
+
+      if (this.relayerQuote) {
+        this.relayerQuote = null
+        this.updateQuoteStatus = 'INITIAL'
+        this.#stopQuoteRefetch()
+        this.emitUpdate()
+      }
+      return
+    }
+
+    const quoteId = generateUuid()
+    this.#updateQuoteId = quoteId
+
+    this.updateQuoteStatus = 'LOADING'
+    this.emitUpdate()
+
+    // Debounce to avoid excessive calls
+    if (debounce) await wait(500)
+    if (this.#updateQuoteId !== quoteId) return // Guard check
+
+    try {
+      // Get the selected pool info - we need chainId and other details
+      // For now, we'll use a placeholder. You'll need to pass or determine the correct pool info
+      const selectedPoolInfo = this.pools[0] // TODO: Determine the correct pool based on selected token/chain
+      if (!selectedPoolInfo) {
+        throw new Error('No pool information available')
+      }
+
+      // Fetch relayer details
+      const detailsResponse = await this.#fetch(
+        `${this.#privacyPoolsRelayerUrl}/relayer/details?chainId=${
+          selectedPoolInfo.chainId
+        }&assetAddress=0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE`
+      )
+
+      if (!detailsResponse.ok) {
+        throw new Error('Failed to fetch relayer details')
+      }
+
+      const relayerDetails = await detailsResponse.json()
+
+      if (this.#updateQuoteId !== quoteId) return // Guard check after async
+
+      // Fetch quote using the actual batchSize from form calculation
+      const quoteResponse = await this.#fetch(
+        `${this.#privacyPoolsRelayerUrl}/relayer/batch/quote`,
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            chainId: selectedPoolInfo.chainId,
+            batchSize: this.batchSize,
+            totalAmount: parseUnits(this.withdrawalAmount, 18).toString(),
+            recipient: this.recipientAddress
+          })
+        }
+      )
+
+      if (!quoteResponse.ok) {
+        throw new Error('Failed to fetch quote')
+      }
+
+      const quote = await quoteResponse.json()
+
+      if (this.#updateQuoteId !== quoteId) return // Guard check after async
+
+      // Store the quote
+      this.relayerQuote = {
+        relayFeeBPS: quote.relayFeeBPS,
+        feeRecipient: getAddress(relayerDetails.feeReceiverAddress),
+        // totalAmountWithFee: (
+        //   parseFloat(this.withdrawalAmount) *
+        //   (1 + quote.relayFeeBPS / 10000)
+        // ).toString()
+        totalAmountWithFee: this.withdrawalAmount
+      }
+
+      console.log('DEBUG: relayerQuote', this.relayerQuote)
+
+      // Start periodic refetch to keep quote fresh (quotes are valid for ~20 seconds)
+      this.#startQuoteRefetch()
+    } catch (error) {
+      if (this.#updateQuoteId !== quoteId) return // Guard check
+
+      this.emitError({
+        level: 'minor',
+        message: 'Failed to fetch relayer quote',
+        error: error instanceof Error ? error : new Error('Unknown error fetching quote')
+      })
+    } finally {
+      if (this.#updateQuoteId === quoteId) {
+        this.updateQuoteStatus = 'INITIAL'
+        this.emitUpdate()
+      }
+    }
+  }
+
+  #startQuoteRefetch() {
+    // Stop any existing refetch loop
+    this.#stopQuoteRefetch()
+
+    // Don't start refetch if form is invalid
+    if (!this.#getIsFormValidToFetchQuote()) return
+
+    this.#quoteRefetchAbortController = new AbortController()
+    const signal = this.#quoteRefetchAbortController.signal
+
+    const refetchLoop = async () => {
+      while (!signal.aborted) {
+        // Wait 18 seconds (slightly less than 20s validity to have a buffer)
+        // eslint-disable-next-line no-await-in-loop
+        await wait(18000)
+        if (signal.aborted) break
+
+        // Only refetch if form is still valid and we're not already loading
+        if (this.#getIsFormValidToFetchQuote() && this.updateQuoteStatus !== 'LOADING') {
+          // eslint-disable-next-line no-await-in-loop
+          await this.updateQuote({ debounce: false })
+        }
+
+        if (signal.aborted) break
+      }
+    }
+
+    // Start the loop
+    refetchLoop()
+  }
+
+  #stopQuoteRefetch() {
+    if (this.#quoteRefetchAbortController) {
+      this.#quoteRefetchAbortController.abort()
+      this.#quoteRefetchAbortController = null
+    }
   }
 
   unloadScreen(forceUnload?: boolean) {
     if (this.hasPersistedState && !forceUnload) return
 
     this.destroyLatestBroadcastedAccountOp()
+    this.#stopQuoteRefetch()
     this.resetForm()
   }
 
@@ -515,6 +725,11 @@ export class PrivacyPoolsController extends EventEmitter {
       recipientAddress: { success: true, message: '' }
     }
     this.#isInitialized = false
+    this.relayerQuote = null
+    this.updateQuoteStatus = 'INITIAL'
+    this.#updateQuoteId = undefined
+    this.#pendingWithdrawalProof = null
+    this.#pendingWithdrawalParams = null
 
     if (shouldDestroyAccountOp) {
       this.destroySignAccountOp()
@@ -538,6 +753,9 @@ export class PrivacyPoolsController extends EventEmitter {
       this.signAccountOpController = null
     }
 
+    this.#stopQuoteRefetch()
+    this.#pendingWithdrawalProof = null
+    this.#pendingWithdrawalParams = null
     this.hasProceeded = false
   }
 
@@ -601,6 +819,145 @@ export class PrivacyPoolsController extends EventEmitter {
     }
   }
 
+  async prepareWithdrawal(params: BatchWithdrawalParams) {
+    if (!this.#selectedAccount?.account) {
+      throw new Error('No account selected')
+    }
+
+    if (!this.relayerQuote) {
+      throw new Error('No relayer quote available')
+    }
+
+    // 1. Store the withdrawal proof and params
+    this.#pendingWithdrawalProof = params.proofs
+    this.#pendingWithdrawalParams = {
+      chainId: params.chainId,
+      poolAddress: params.poolAddress,
+      processooor: params.withdrawal.processooor,
+      recipient: this.recipientAddress || '',
+      batchSize: params.proofs.length,
+      totalAmount: this.withdrawalAmount,
+      data: params.withdrawal.data
+    }
+
+    // 2. Create a placeholder call for the confirmation modal
+    // IMPORTANT: For Privacy Pools withdrawals via relayer, this Call is NEVER broadcast
+    // The actual withdrawal is submitted to the relayer API in broadcastWithdrawal()
+    // We create a simple placeholder Call (0 ETH transfer) that will pass estimation
+    // This allows the SignAccountOpController to initialize and show the confirmation modal
+    const placeholderCall: Call = {
+      to: (this.recipientAddress || this.#selectedAccount.account.addr) as `0x${string}`,
+      value: 0n,
+      data: '0x' as `0x${string}`, // Empty data - simple ETH transfer
+      fromUserRequestId: randomId()
+    }
+
+    // 3. Initialize SignAccountOpController with the placeholder call
+    // This shows the confirmation modal with transaction details
+    // When user confirms, broadcastWithdrawal() will be called instead of broadcasting this Call
+    await this.syncSignAccountOp([placeholderCall])
+
+    this.emitUpdate()
+  }
+
+  async broadcastWithdrawal(): Promise<BatchWithdrawalResponse> {
+    // 1. Validate we have pending withdrawal data
+    if (!this.#pendingWithdrawalProof || !this.#pendingWithdrawalParams) {
+      throw new Error('No pending withdrawal to broadcast')
+    }
+
+    if (!this.#selectedAccount?.account) {
+      throw new Error('No account selected')
+    }
+
+    // 2. Build params for relayer API
+    const params: BatchWithdrawalParams = {
+      chainId: this.#pendingWithdrawalParams.chainId,
+      poolAddress: this.#pendingWithdrawalParams.poolAddress,
+      withdrawal: {
+        processooor: this.#pendingWithdrawalParams.processooor,
+        data: this.#pendingWithdrawalParams.data
+      },
+      proofs: this.#pendingWithdrawalProof
+    }
+
+    // 3. Call relayer API (existing method)
+    const response = await this.submitBatchWithdrawal(params)
+
+    console.log('DEBUG broadcastWithdrawal: response', response)
+
+    if (!response.success || !response.data) {
+      throw new Error(response.message || 'Withdrawal failed')
+    }
+
+    console.log('DEBUG broadcastWithdrawal: response.data', response.data)
+    console.log('DEBUG broadcastWithdrawal: txId', response.data.txId)
+    console.log('DEBUG broadcastWithdrawal: relayerId', response.data.relayerId)
+
+    // 4. Store as AccountOp for tracking
+    // For tracking to work, we need a signature property
+    // Use the txHash as the signature since this is a relayer transaction
+    this.latestBroadcastedAccountOp = {
+      accountAddr: this.#selectedAccount.account.addr,
+      chainId: BigInt(this.#pendingWithdrawalParams.chainId),
+      signingKeyAddr: null,
+      signingKeyType: null,
+      gasLimit: null,
+      gasFeePayment: null,
+      nonce: 0n,
+      signature: response.data.txId as `0x${string}`, // Use txHash as signature for tracking
+      accountOpToExecuteBefore: null,
+      calls: this.signAccountOpController?.accountOp.calls || [],
+      // @ts-ignore - Custom properties for privacy pools withdrawal tracking
+      status: AccountOpStatus.BroadcastedButNotConfirmed,
+      // @ts-ignore
+      txnId: response.data.txId,
+      // @ts-ignore
+      identifiedBy: 'userOp',
+      meta: {
+        // Store relayer transaction info for tracking
+        // @ts-ignore - Custom meta properties for privacy pools withdrawal
+        txnId: response.data.txId,
+        // @ts-ignore
+        relayerId: response.data.relayerId,
+        // @ts-ignore
+        isPrivacyPoolsWithdrawal: true
+      }
+    }
+
+    console.log(
+      'DEBUG broadcastWithdrawal: latestBroadcastedAccountOp',
+      this.latestBroadcastedAccountOp
+    )
+
+    // Store the token for tracking page display
+    this.latestBroadcastedToken = this.selectedToken
+
+    // 5. Clear pending data
+    this.#pendingWithdrawalProof = null
+    this.#pendingWithdrawalParams = null
+
+    // 6. Destroy SignAccountOp since we're done with it
+    this.destroySignAccountOp()
+
+    if (this.latestBroadcastedAccountOp) {
+      // 7. Start polling for transaction confirmation
+      this.#startTransactionPolling(
+        BigInt(this.latestBroadcastedAccountOp.chainId),
+        response.data.txId
+      )
+    }
+
+    this.emitUpdate()
+
+    console.log(
+      'DEBUG broadcastWithdrawal: after emitUpdate, latestBroadcastedAccountOp',
+      this.latestBroadcastedAccountOp
+    )
+
+    return response
+  }
+
   async syncSignAccountOp(calls?: Call[]) {
     if (!this.#selectedAccount?.account) return
 
@@ -613,6 +970,22 @@ export class PrivacyPoolsController extends EventEmitter {
       // If SignAccountOpController is already initialized, we just update it
       if (this.signAccountOpController) {
         this.signAccountOpController.update({ calls: transactionCalls })
+
+        // Update withdrawal metadata if we have pending withdrawal
+        if (this.#pendingWithdrawalParams) {
+          if (!this.signAccountOpController.accountOp.meta) {
+            this.signAccountOpController.accountOp.meta = {}
+          }
+          // @ts-ignore - Custom meta property for privacy pools withdrawal
+          this.signAccountOpController.accountOp.meta.withdrawalData = {
+            chainId: this.#pendingWithdrawalParams.chainId,
+            poolAddress: this.#pendingWithdrawalParams.poolAddress,
+            recipient: this.#pendingWithdrawalParams.recipient,
+            totalAmount: this.#pendingWithdrawalParams.totalAmount,
+            isPrivacyPoolsWithdrawal: true
+          }
+        }
+
         return
       }
 
@@ -696,8 +1069,8 @@ export class PrivacyPoolsController extends EventEmitter {
       return {
         success: true,
         data: {
-          txId: response.data?.txId || response.txId,
-          relayerId: response.data?.relayerId || response.id,
+          txId: response.data?.txId || response.txId || response.txHash,
+          relayerId: response.data?.relayerId || response.id || response.requestId,
           estimatedConfirmation: response.data?.estimatedConfirmation
         }
       }
@@ -718,20 +1091,126 @@ export class PrivacyPoolsController extends EventEmitter {
     }
   }
 
-  get isInitialized(): boolean {
-    return this.#isInitialized
+  #startTransactionPolling(chainId: bigint, txId: string) {
+    // Stop any existing polling
+    this.#stopTransactionPolling()
+
+    console.log('DEBUG: Starting transaction polling', { chainId: chainId.toString(), txId })
+
+    const network = this.#networks.networks.find((net) => net.chainId === chainId)
+    if (!network) {
+      console.error('DEBUG: Network not found for chainId:', chainId)
+      return
+    }
+
+    const provider = this.#providers.providers[network.chainId.toString()]
+    if (!provider) {
+      console.error('DEBUG: Provider not found for chainId:', chainId)
+      return
+    }
+
+    console.log('DEBUG: Provider found, starting polling loop')
+
+    this.#transactionPollingAbortController = new AbortController()
+    const signal = this.#transactionPollingAbortController.signal
+
+    const startTime = Date.now()
+    const TIMEOUT = 15 * 60 * 1000 // 15 minutes timeout (like ActivityController)
+    const POLL_INTERVAL = 5000 // 5 seconds
+
+    const pollLoop = async () => {
+      let pollCount = 0
+      while (!signal.aborted) {
+        try {
+          pollCount++
+          const elapsed = Date.now() - startTime
+          console.log(
+            `DEBUG: Polling attempt #${pollCount} (elapsed: ${Math.round(elapsed / 1000)}s)`
+          )
+
+          // Check for timeout
+          if (elapsed > TIMEOUT) {
+            console.log('DEBUG: Transaction polling timeout after 15 minutes')
+            if (this.latestBroadcastedAccountOp) {
+              // Create a new object reference to ensure UI reactivity
+              this.latestBroadcastedAccountOp = {
+                ...this.latestBroadcastedAccountOp,
+                // @ts-ignore
+                status: AccountOpStatus.BroadcastButStuck
+              }
+              this.emitUpdate()
+            }
+            this.#stopTransactionPolling()
+            break
+          }
+
+          // Fetch transaction receipt
+          console.log('DEBUG: Fetching receipt for txId:', txId)
+          // eslint-disable-next-line no-await-in-loop
+          const receipt = await provider.getTransactionReceipt(txId)
+
+          if (receipt) {
+            console.log('DEBUG: Transaction receipt found!', {
+              status: receipt.status,
+              blockNumber: receipt.blockNumber,
+              gasUsed: receipt.gasUsed?.toString()
+            })
+
+            // Determine success based on receipt status
+            const isSuccess = !!receipt.status
+
+            if (this.latestBroadcastedAccountOp) {
+              // Create a new object reference to ensure UI reactivity
+              // Some frameworks only detect changes when the object reference changes
+              this.latestBroadcastedAccountOp = {
+                ...this.latestBroadcastedAccountOp,
+                // @ts-ignore - Update status based on receipt
+                status: isSuccess ? AccountOpStatus.Success : AccountOpStatus.Failure
+              }
+
+              console.log(
+                'DEBUG: Updated latestBroadcastedAccountOp status to:',
+                isSuccess ? 'Success' : 'Failure'
+              )
+
+              this.emitUpdate()
+              console.log('DEBUG: emitUpdate() called after status change')
+            }
+
+            // Stop polling after confirmation
+            this.#stopTransactionPolling()
+            console.log('DEBUG: Polling stopped after confirmation')
+            break
+          } else {
+            console.log('DEBUG: No receipt yet, will retry in', POLL_INTERVAL / 1000, 'seconds')
+          }
+
+          // Wait before next poll
+          // eslint-disable-next-line no-await-in-loop
+          await wait(POLL_INTERVAL)
+        } catch (error) {
+          console.error('DEBUG: Error polling transaction:', error)
+          console.error('DEBUG: Error details:', {
+            message: error instanceof Error ? error.message : 'Unknown error',
+            stack: error instanceof Error ? error.stack : undefined
+          })
+          // Continue polling even on error
+          // eslint-disable-next-line no-await-in-loop
+          await wait(POLL_INTERVAL)
+        }
+      }
+    }
+
+    // Start the polling loop
+    console.log('DEBUG: Initiating polling loop')
+    pollLoop()
   }
 
-  get initializationError(): string | null {
-    return this.#initializationError
-  }
-
-  get initialPromiseLoaded(): boolean {
-    return this.#initialPromiseLoaded
-  }
-
-  get selectedToken() {
-    return this.#selectedToken
+  #stopTransactionPolling() {
+    if (this.#transactionPollingAbortController) {
+      this.#transactionPollingAbortController.abort()
+      this.#transactionPollingAbortController = null
+    }
   }
 
   set selectedToken(token: any) {
@@ -758,6 +1237,22 @@ export class PrivacyPoolsController extends EventEmitter {
       this.withdrawalAmount = ''
       this.amountInFiat = ''
     }
+  }
+
+  get selectedToken() {
+    return this.#selectedToken
+  }
+
+  get isInitialized(): boolean {
+    return this.#isInitialized
+  }
+
+  get initializationError(): string | null {
+    return this.#initializationError
+  }
+
+  get initialPromiseLoaded(): boolean {
+    return this.#initialPromiseLoaded
   }
 
   get maxAmount(): string {
