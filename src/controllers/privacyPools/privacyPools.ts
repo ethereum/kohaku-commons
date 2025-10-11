@@ -11,7 +11,7 @@ import { HDNodeWallet, Mnemonic } from 'ethers'
 import type { KeystoreController } from '../keystore/keystore'
 import { type ChainData, chainData, whitelistedChains } from './config'
 import EventEmitter from '../eventEmitter/eventEmitter'
-import { SignAccountOpController } from '../signAccountOp/signAccountOp'
+import { SignAccountOpController, SigningStatus } from '../signAccountOp/signAccountOp'
 import { getBaseAccount } from '../../libs/account/getBaseAccount'
 import { AccountOp } from '../../libs/accountOp/accountOp'
 import { AccountOpStatus, Call } from '../../libs/accountOp/types'
@@ -190,6 +190,7 @@ export class PrivacyPoolsController extends EventEmitter {
     relayFeeBPS: number
     feeRecipient: string
     totalAmountWithFee: string
+    data: string
   } | null = null
 
   // Transfer/Withdrawal-specific properties
@@ -560,13 +561,10 @@ export class PrivacyPoolsController extends EventEmitter {
   }
 
   async updateQuote(options?: { debounce?: boolean }) {
-    console.log('DEBUG: updateQuote called')
     const { debounce = false } = options || {}
 
     // Clear quote if form is invalid
     if (!this.#getIsFormValidToFetchQuote()) {
-      console.log('DEBUG: Form is invalid, clearing quote')
-
       if (this.relayerQuote) {
         this.relayerQuote = null
         this.updateQuoteStatus = 'INITIAL'
@@ -636,11 +634,12 @@ export class PrivacyPoolsController extends EventEmitter {
       this.relayerQuote = {
         relayFeeBPS: quote.relayFeeBPS,
         feeRecipient: getAddress(relayerDetails.feeReceiverAddress),
-        // totalAmountWithFee: (
-        //   parseFloat(this.withdrawalAmount) *
-        //   (1 + quote.relayFeeBPS / 10000)
-        // ).toString()
-        totalAmountWithFee: this.withdrawalAmount
+        // TODO: This will be used in future (probably)
+        totalAmountWithFee: (
+          parseFloat(this.withdrawalAmount) *
+          (1 + quote.relayFeeBPS / 10000)
+        ).toString(),
+        data: quote.batchFeeCommitment.batchRelayData
       }
 
       console.log('DEBUG: relayerQuote', this.relayerQuote)
@@ -664,10 +663,8 @@ export class PrivacyPoolsController extends EventEmitter {
   }
 
   #startQuoteRefetch() {
-    // Stop any existing refetch loop
     this.#stopQuoteRefetch()
 
-    // Don't start refetch if form is invalid
     if (!this.#getIsFormValidToFetchQuote()) return
 
     this.#quoteRefetchAbortController = new AbortController()
@@ -690,7 +687,6 @@ export class PrivacyPoolsController extends EventEmitter {
       }
     }
 
-    // Start the loop
     refetchLoop()
   }
 
@@ -860,7 +856,7 @@ export class PrivacyPoolsController extends EventEmitter {
     this.emitUpdate()
   }
 
-  async broadcastWithdrawal(): Promise<BatchWithdrawalResponse> {
+  async broadcastWithdrawal() {
     // 1. Validate we have pending withdrawal data
     if (!this.#pendingWithdrawalProof || !this.#pendingWithdrawalParams) {
       throw new Error('No pending withdrawal to broadcast')
@@ -870,7 +866,53 @@ export class PrivacyPoolsController extends EventEmitter {
       throw new Error('No account selected')
     }
 
-    // 2. Build params for relayer API
+    // 2. Update SignAccountOpController status to show loading screen
+    if (this.signAccountOpController) {
+      this.signAccountOpController.updateStatus(SigningStatus.InProgress)
+    }
+
+    // 3. IMMEDIATELY set latestBroadcastedAccountOp to show loading screen
+    // This allows the UI to transition to the track screen right away
+    this.latestBroadcastedAccountOp = {
+      accountAddr: this.#selectedAccount.account.addr,
+      chainId: BigInt(this.#pendingWithdrawalParams.chainId),
+      signingKeyAddr: null,
+      signingKeyType: null,
+      gasLimit: null,
+      gasFeePayment: null,
+      nonce: 0n,
+      signature: '0x' as `0x${string}`, // Temporary placeholder, will be updated with actual txId
+      accountOpToExecuteBefore: null,
+      calls: this.signAccountOpController?.accountOp.calls || [],
+      // @ts-ignore - Custom properties for privacy pools withdrawal tracking
+      status: AccountOpStatus.BroadcastedButNotConfirmed,
+      // @ts-ignore
+      txnId: null, // Will be updated after relayer response
+      // @ts-ignore
+      identifiedBy: 'userOp',
+      meta: {
+        // @ts-ignore - Custom meta properties for privacy pools withdrawal
+        txnId: null, // Will be updated after relayer response
+        // @ts-ignore
+        relayerId: null, // Will be updated after relayer response
+        // @ts-ignore
+        isPrivacyPoolsWithdrawal: true
+      }
+    }
+
+    // Store the token for tracking page display
+    this.latestBroadcastedToken = this.selectedToken
+
+    // 4. CRITICAL: Set shouldTrackLatestBroadcastedAccountOp to true BEFORE emitUpdate
+    // This ensures the UI knows to show the tracking screen immediately
+    this.shouldTrackLatestBroadcastedAccountOp = true
+
+    // 5. Emit update to show loading screen
+    this.emitUpdate()
+
+    console.log('DEBUG broadcastWithdrawal: Showing loading screen, calling relayer API...')
+
+    // 6. Build params for relayer API
     const params: BatchWithdrawalParams = {
       chainId: this.#pendingWithdrawalParams.chainId,
       poolAddress: this.#pendingWithdrawalParams.poolAddress,
@@ -881,12 +923,16 @@ export class PrivacyPoolsController extends EventEmitter {
       proofs: this.#pendingWithdrawalProof
     }
 
-    // 3. Call relayer API (existing method)
+    // 7. Call relayer API (this may take time)
     const response = await this.submitBatchWithdrawal(params)
 
     console.log('DEBUG broadcastWithdrawal: response', response)
 
     if (!response.success || !response.data) {
+      // Update status to Done even on error so user can retry
+      if (this.signAccountOpController) {
+        this.signAccountOpController.updateStatus(SigningStatus.Done)
+      }
       throw new Error(response.message || 'Withdrawal failed')
     }
 
@@ -894,68 +940,43 @@ export class PrivacyPoolsController extends EventEmitter {
     console.log('DEBUG broadcastWithdrawal: txId', response.data.txId)
     console.log('DEBUG broadcastWithdrawal: relayerId', response.data.relayerId)
 
-    // 4. Store as AccountOp for tracking
-    // For tracking to work, we need a signature property
-    // Use the txHash as the signature since this is a relayer transaction
+    // 8. Update latestBroadcastedAccountOp with actual transaction data from relayer
     this.latestBroadcastedAccountOp = {
-      accountAddr: this.#selectedAccount.account.addr,
-      chainId: BigInt(this.#pendingWithdrawalParams.chainId),
-      signingKeyAddr: null,
-      signingKeyType: null,
-      gasLimit: null,
-      gasFeePayment: null,
-      nonce: 0n,
+      ...this.latestBroadcastedAccountOp,
       signature: response.data.txId as `0x${string}`, // Use txHash as signature for tracking
-      accountOpToExecuteBefore: null,
-      calls: this.signAccountOpController?.accountOp.calls || [],
-      // @ts-ignore - Custom properties for privacy pools withdrawal tracking
-      status: AccountOpStatus.BroadcastedButNotConfirmed,
       // @ts-ignore
       txnId: response.data.txId,
-      // @ts-ignore
-      identifiedBy: 'userOp',
       meta: {
-        // Store relayer transaction info for tracking
-        // @ts-ignore - Custom meta properties for privacy pools withdrawal
+        ...(this.latestBroadcastedAccountOp?.meta || {}),
+        // @ts-ignore - Update with actual relayer response data
         txnId: response.data.txId,
         // @ts-ignore
-        relayerId: response.data.relayerId,
-        // @ts-ignore
-        isPrivacyPoolsWithdrawal: true
+        relayerId: response.data.relayerId
       }
     }
 
     console.log(
-      'DEBUG broadcastWithdrawal: latestBroadcastedAccountOp',
+      'DEBUG broadcastWithdrawal: Updated latestBroadcastedAccountOp with relayer response',
       this.latestBroadcastedAccountOp
     )
 
-    // Store the token for tracking page display
-    this.latestBroadcastedToken = this.selectedToken
-
-    // 5. Clear pending data
+    // 9. Clear pending data
     this.#pendingWithdrawalProof = null
     this.#pendingWithdrawalParams = null
 
-    // 6. Destroy SignAccountOp since we're done with it
-    this.destroySignAccountOp()
+    // 10. Start polling for transaction confirmation
+    this.#startTransactionPolling(
+      BigInt(this.latestBroadcastedAccountOp?.chainId || 0),
+      response.data.txId
+    )
 
-    if (this.latestBroadcastedAccountOp) {
-      // 7. Start polling for transaction confirmation
-      this.#startTransactionPolling(
-        BigInt(this.latestBroadcastedAccountOp.chainId),
-        response.data.txId
-      )
-    }
-
+    // 11. Emit update with actual transaction data
     this.emitUpdate()
 
     console.log(
       'DEBUG broadcastWithdrawal: after emitUpdate, latestBroadcastedAccountOp',
       this.latestBroadcastedAccountOp
     )
-
-    return response
   }
 
   async syncSignAccountOp(calls?: Call[]) {
