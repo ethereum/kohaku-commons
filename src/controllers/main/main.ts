@@ -212,6 +212,7 @@ export class MainController extends EventEmitter {
     relayerUrl,
     velcroUrl,
     privacyPoolsAspUrl,
+    privacyPoolsRelayerUrl,
     alchemyApiKey,
     featureFlags,
     swapApiKey,
@@ -226,6 +227,7 @@ export class MainController extends EventEmitter {
     relayerUrl: string
     velcroUrl: string
     privacyPoolsAspUrl: string
+    privacyPoolsRelayerUrl: string
     alchemyApiKey: string
     featureFlags: Partial<FeatureFlags>
     swapApiKey: string
@@ -509,7 +511,9 @@ export class MainController extends EventEmitter {
       this.#externalSignerControllers,
       relayerUrl,
       privacyPoolsAspUrl,
-      alchemyApiKey
+      privacyPoolsRelayerUrl,
+      alchemyApiKey,
+      this.fetch
     )
   }
 
