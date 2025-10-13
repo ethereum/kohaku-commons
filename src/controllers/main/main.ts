@@ -2035,7 +2035,10 @@ export class MainController extends EventEmitter {
         this.privacyPools.latestBroadcastedAccountOp = submittedAccountOp
       }
 
-      this.privacyPools.resetForm()
+      // Pass false to keep SignAccountOpController alive during tracking
+      // This prevents stale state issues on subsequent deposits
+      // The SignAccountOpController will be destroyed when user navigates away
+      this.privacyPools.resetForm(false)
     }
 
     await this.#notificationManager.create({
