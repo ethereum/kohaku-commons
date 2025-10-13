@@ -992,6 +992,11 @@ export class PrivacyPoolsController extends EventEmitter {
     if (!transactionCalls.length) return
 
     try {
+      // IMPORTANT: Enable tracking for the upcoming broadcast
+      // This flag is checked in main.ts handleSignAndBroadcastAccountOp() to determine
+      // whether to set latestBroadcastedAccountOp after successful broadcast
+      this.shouldTrackLatestBroadcastedAccountOp = true
+
       // If SignAccountOpController is already initialized, we just update it
       if (this.signAccountOpController) {
         this.signAccountOpController.update({ calls: transactionCalls })
