@@ -756,6 +756,7 @@ export class PrivacyPoolsController extends EventEmitter {
   }
 
   destroyLatestBroadcastedAccountOp() {
+    this.shouldTrackLatestBroadcastedAccountOp = false
     this.latestBroadcastedAccountOp = null
     this.emitUpdate()
   }
@@ -857,7 +858,6 @@ export class PrivacyPoolsController extends EventEmitter {
   }
 
   async broadcastWithdrawal() {
-    // 1. Validate we have pending withdrawal data
     if (!this.#pendingWithdrawalProof || !this.#pendingWithdrawalParams) {
       throw new Error('No pending withdrawal to broadcast')
     }
@@ -866,12 +866,12 @@ export class PrivacyPoolsController extends EventEmitter {
       throw new Error('No account selected')
     }
 
-    // 2. Update SignAccountOpController status to show loading screen
+    // Update SignAccountOpController status to show loading screen
     if (this.signAccountOpController) {
       this.signAccountOpController.updateStatus(SigningStatus.InProgress)
     }
 
-    // 3. IMMEDIATELY set latestBroadcastedAccountOp to show loading screen
+    // IMMEDIATELY set latestBroadcastedAccountOp to show loading screen
     // This allows the UI to transition to the track screen right away
     this.latestBroadcastedAccountOp = {
       accountAddr: this.#selectedAccount.account.addr,
@@ -903,16 +903,13 @@ export class PrivacyPoolsController extends EventEmitter {
     // Store the token for tracking page display
     this.latestBroadcastedToken = this.selectedToken
 
-    // 4. CRITICAL: Set shouldTrackLatestBroadcastedAccountOp to true BEFORE emitUpdate
+    // CRITICAL: Set shouldTrackLatestBroadcastedAccountOp to true BEFORE emitUpdate
     // This ensures the UI knows to show the tracking screen immediately
     this.shouldTrackLatestBroadcastedAccountOp = true
 
-    // 5. Emit update to show loading screen
     this.emitUpdate()
 
-    console.log('DEBUG broadcastWithdrawal: Showing loading screen, calling relayer API...')
-
-    // 6. Build params for relayer API
+    // Build params for relayer API
     const params: BatchWithdrawalParams = {
       chainId: this.#pendingWithdrawalParams.chainId,
       poolAddress: this.#pendingWithdrawalParams.poolAddress,
@@ -923,7 +920,6 @@ export class PrivacyPoolsController extends EventEmitter {
       proofs: this.#pendingWithdrawalProof
     }
 
-    // 7. Call relayer API (this may take time)
     const response = await this.submitBatchWithdrawal(params)
 
     console.log('DEBUG broadcastWithdrawal: response', response)
@@ -940,7 +936,7 @@ export class PrivacyPoolsController extends EventEmitter {
     console.log('DEBUG broadcastWithdrawal: txId', response.data.txId)
     console.log('DEBUG broadcastWithdrawal: relayerId', response.data.relayerId)
 
-    // 8. Update latestBroadcastedAccountOp with actual transaction data from relayer
+    // Update latestBroadcastedAccountOp with actual transaction data from relayer
     this.latestBroadcastedAccountOp = {
       ...this.latestBroadcastedAccountOp,
       signature: response.data.txId as `0x${string}`, // Use txHash as signature for tracking
@@ -960,17 +956,14 @@ export class PrivacyPoolsController extends EventEmitter {
       this.latestBroadcastedAccountOp
     )
 
-    // 9. Clear pending data
     this.#pendingWithdrawalProof = null
     this.#pendingWithdrawalParams = null
 
-    // 10. Start polling for transaction confirmation
     this.#startTransactionPolling(
       BigInt(this.latestBroadcastedAccountOp?.chainId || 0),
       response.data.txId
     )
 
-    // 11. Emit update with actual transaction data
     this.emitUpdate()
 
     console.log(
@@ -1057,8 +1050,6 @@ export class PrivacyPoolsController extends EventEmitter {
    */
   async submitBatchWithdrawal(params: BatchWithdrawalParams): Promise<BatchWithdrawalResponse> {
     try {
-      console.log('DEBUG: calling Submit Batch Withdrawal', this.#privacyPoolsRelayerUrl)
-
       // Convert all bigint values to strings for JSON serialization
       const serializedParams = {
         ...params,
@@ -1096,6 +1087,7 @@ export class PrivacyPoolsController extends EventEmitter {
         }
       }
     } catch (error) {
+      console.log('DEBUG: Error submitting batch withdrawal to relayer', error)
       const errorMessage =
         error instanceof Error ? error.message : 'Failed to submit batch withdrawal to relayer'
 
@@ -1151,9 +1143,7 @@ export class PrivacyPoolsController extends EventEmitter {
 
           // Check for timeout
           if (elapsed > TIMEOUT) {
-            console.log('DEBUG: Transaction polling timeout after 15 minutes')
             if (this.latestBroadcastedAccountOp) {
-              // Create a new object reference to ensure UI reactivity
               this.latestBroadcastedAccountOp = {
                 ...this.latestBroadcastedAccountOp,
                 // @ts-ignore
@@ -1165,8 +1155,6 @@ export class PrivacyPoolsController extends EventEmitter {
             break
           }
 
-          // Fetch transaction receipt
-          console.log('DEBUG: Fetching receipt for txId:', txId)
           // eslint-disable-next-line no-await-in-loop
           const receipt = await provider.getTransactionReceipt(txId)
 
@@ -1181,24 +1169,15 @@ export class PrivacyPoolsController extends EventEmitter {
             const isSuccess = !!receipt.status
 
             if (this.latestBroadcastedAccountOp) {
-              // Create a new object reference to ensure UI reactivity
-              // Some frameworks only detect changes when the object reference changes
               this.latestBroadcastedAccountOp = {
                 ...this.latestBroadcastedAccountOp,
                 // @ts-ignore - Update status based on receipt
                 status: isSuccess ? AccountOpStatus.Success : AccountOpStatus.Failure
               }
 
-              console.log(
-                'DEBUG: Updated latestBroadcastedAccountOp status to:',
-                isSuccess ? 'Success' : 'Failure'
-              )
-
               this.emitUpdate()
-              console.log('DEBUG: emitUpdate() called after status change')
             }
 
-            // Stop polling after confirmation
             this.#stopTransactionPolling()
             console.log('DEBUG: Polling stopped after confirmation')
             break
@@ -1222,8 +1201,6 @@ export class PrivacyPoolsController extends EventEmitter {
       }
     }
 
-    // Start the polling loop
-    console.log('DEBUG: Initiating polling loop')
     pollLoop()
   }
 
