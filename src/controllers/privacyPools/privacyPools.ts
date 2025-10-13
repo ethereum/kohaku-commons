@@ -27,16 +27,16 @@ import { ProvidersController } from '../providers/providers'
 import { SelectedAccountController } from '../selectedAccount/selectedAccount'
 import { ExternalSignerControllers, Key } from '../../interfaces/keystore'
 import { AddressState } from '../../interfaces/domains'
-import { getTokenAmount } from '../../libs/portfolio/helpers'
 import {
   convertTokenPriceToBigInt,
   getSafeAmountFromFieldValue
 } from '../../utils/numbers/formatters'
 import { getAppSecret, getEip712Payload } from './derivation'
-import wait from '../../utils/wait'
 import { relayerCall } from '../../libs/relayerCall/relayerCall'
 import { Fetch } from '../../interfaces/fetch'
 import { generateUuid } from '../../utils/uuid'
+import { mnemonicFromEntropy } from './utils/mnemonicFromEntropy'
+import wait from '../../utils/wait'
 
 const HARD_CODED_CURRENCY = 'usd'
 
@@ -47,6 +47,7 @@ interface PrivacyPoolsFormUpdate {
   addressState?: AddressState
   importedSecretNote?: string
   selectedToken?: any
+  maxAmount?: string
   shouldSetMaxAmount?: boolean
   isRecipientAddressUnknownAgreed?: boolean
   batchSize?: number
@@ -174,7 +175,9 @@ export class PrivacyPoolsController extends EventEmitter {
 
   withdrawalAmount: string = ''
 
-  signedTypedData: string | null = null
+  maxAmount: string = ''
+
+  secret: string | null = null
 
   seedPhrase: string = ''
 
@@ -497,6 +500,7 @@ export class PrivacyPoolsController extends EventEmitter {
     addressState,
     importedSecretNote,
     selectedToken,
+    maxAmount,
     shouldSetMaxAmount,
     isRecipientAddressUnknownAgreed,
     batchSize
@@ -533,11 +537,9 @@ export class PrivacyPoolsController extends EventEmitter {
       shouldUpdateQuote = true
     }
 
-    if (shouldSetMaxAmount && this.maxAmount) {
-      this.withdrawalAmount = this.maxAmount
+    if (typeof maxAmount === 'string') {
+      this.maxAmount = maxAmount
       this.#calculateAmountInFiat(this.maxAmount)
-      this.programmaticUpdateCounter++
-      shouldUpdateQuote = true
     }
 
     if (typeof isRecipientAddressUnknownAgreed === 'boolean') {
@@ -546,6 +548,13 @@ export class PrivacyPoolsController extends EventEmitter {
 
     if (typeof batchSize === 'number') {
       this.batchSize = batchSize
+      shouldUpdateQuote = true
+    }
+
+    if (shouldSetMaxAmount && this.maxAmount) {
+      this.withdrawalAmount = this.maxAmount
+      this.#calculateAmountInFiat(this.maxAmount)
+      this.programmaticUpdateCounter++
       shouldUpdateQuote = true
     }
 
@@ -804,11 +813,8 @@ export class PrivacyPoolsController extends EventEmitter {
     try {
       const appSecret = await this.#generateAppSecretInternal(appInfo)
 
-      // TODO: Encrypt before saving in this.signedTypedData
-
-      this.signedTypedData = appSecret
-      console.log('DEBUG: App secret:', appSecret)
-
+      const mnemonic = await mnemonicFromEntropy(toBytes(appSecret))
+      this.secret = mnemonic
       this.emitUpdate()
     } catch (error) {
       console.error('Failed to generate app secret:', error)
@@ -825,7 +831,7 @@ export class PrivacyPoolsController extends EventEmitter {
       throw new Error('No relayer quote available')
     }
 
-    // 1. Store the withdrawal proof and params
+    // Store the withdrawal proof and params
     this.#pendingWithdrawalProof = params.proofs
     this.#pendingWithdrawalParams = {
       chainId: params.chainId,
@@ -837,7 +843,7 @@ export class PrivacyPoolsController extends EventEmitter {
       data: params.withdrawal.data
     }
 
-    // 2. Create a placeholder call for the confirmation modal
+    // Create a placeholder call for the confirmation modal
     // IMPORTANT: For Privacy Pools withdrawals via relayer, this Call is NEVER broadcast
     // The actual withdrawal is submitted to the relayer API in broadcastWithdrawal()
     // We create a simple placeholder Call (0 ETH transfer) that will pass estimation
@@ -849,7 +855,7 @@ export class PrivacyPoolsController extends EventEmitter {
       fromUserRequestId: randomId()
     }
 
-    // 3. Initialize SignAccountOpController with the placeholder call
+    // Initialize SignAccountOpController with the placeholder call
     // This shows the confirmation modal with transaction details
     // When user confirms, broadcastWithdrawal() will be called instead of broadcasting this Call
     await this.syncSignAccountOp([placeholderCall])
@@ -970,6 +976,11 @@ export class PrivacyPoolsController extends EventEmitter {
       'DEBUG broadcastWithdrawal: after emitUpdate, latestBroadcastedAccountOp',
       this.latestBroadcastedAccountOp
     )
+  }
+
+  async resetSecret() {
+    this.secret = null
+    this.emitUpdate()
   }
 
   async syncSignAccountOp(calls?: Call[]) {
@@ -1253,17 +1264,6 @@ export class PrivacyPoolsController extends EventEmitter {
     return this.#initialPromiseLoaded
   }
 
-  get maxAmount(): string {
-    if (
-      !this.selectedToken ||
-      getTokenAmount(this.selectedToken) === 0n ||
-      typeof this.selectedToken.decimals !== 'number'
-    )
-      return '0'
-
-    return formatUnits(getTokenAmount(this.selectedToken), this.selectedToken.decimals)
-  }
-
   get hasPersistedState() {
     return !!(this.depositAmount || this.withdrawalAmount || this.addressState.fieldValue)
   }
@@ -1280,7 +1280,6 @@ export class PrivacyPoolsController extends EventEmitter {
       initialPromiseLoaded: this.initialPromiseLoaded,
       hasPersistedState: this.hasPersistedState,
       selectedToken: this.selectedToken,
-      maxAmount: this.maxAmount,
       recipientAddress: this.recipientAddress
     }
   }
