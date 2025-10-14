@@ -89,6 +89,7 @@ export interface Network {
   allowForce4337?: boolean
   disabled?: boolean
   batchMaxCount?: number
+  preferHelios?: boolean
 }
 
 export interface AddNetworkRequestParams {
