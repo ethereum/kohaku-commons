@@ -1,3 +1,4 @@
+/* eslint-disable no-console */
 import {
   formatUnits,
   getAddress,
@@ -782,27 +783,21 @@ export class PrivacyPoolsController extends EventEmitter {
     this.emitUpdate()
   }
 
-  async generateKeys() {
+  async generatePPv1Keys() {
     try {
       // Step 1: Generate NullifyingKey
-      const nullifyingKey = await this.#generateAppSecretInternal('nullifyingKey')
-      console.log('DEBUG: Nullifying key:', nullifyingKey)
+      const masterNullifierKey = await this.#generateAppSecretInternal('master-nullifier')
 
       // Step 2: Generate RevocableKey
-      const revocableKey = await this.#generateAppSecretInternal('revocableKey')
-      console.log('DEBUG: Revocable key:', revocableKey)
+      const masterSecretKey = await this.#generateAppSecretInternal('master-secret')
 
-      // Step 3: Generate ViewingKey
-      const viewingKey = await this.#generateAppSecretInternal('viewingKey')
-      console.log('DEBUG: Viewing key:', viewingKey)
-
-      // TODO: Encrypt and store keys in Extension Local Storage
-
-      return {
-        nullifyingKey,
-        revocableKey,
-        viewingKey
+      const secrets = {
+        masterNullifierSeed: masterNullifierKey,
+        masterSecretSeed: masterSecretKey
       }
+
+      this.secret = JSON.stringify(secrets)
+      this.emitUpdate()
     } catch (error) {
       console.error('Failed to generate keys:', error)
       throw error
