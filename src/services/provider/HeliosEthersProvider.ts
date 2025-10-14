@@ -4,7 +4,7 @@ import { createHeliosProvider, HeliosProvider, NetworkKind } from '@a16z/helios'
 import { AbstractProvider, Network, PerformActionRequest } from 'ethers'
 import { RPCProvider } from 'interfaces/provider'
 import type { MinNetworkConfig } from './getRpcProvider'
-import { extractParamsFromRequest } from './extractParamsFromRequest'
+import { mapPerformActionToJsonRpc } from './mapPerformActionToJsonRpc'
 
 export class HeliosEthersProvider extends AbstractProvider implements RPCProvider {
   config: MinNetworkConfig
@@ -86,6 +86,6 @@ export class HeliosEthersProvider extends AbstractProvider implements RPCProvide
   }
 
   _perform<T = any>(req: PerformActionRequest): Promise<T> {
-    return this._send(req.method, extractParamsFromRequest(req))
+    return this._send(...mapPerformActionToJsonRpc(req))
   }
 }
