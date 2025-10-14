@@ -60,7 +60,7 @@ export abstract class Bundler {
    * @param network
    */
   protected getProvider(network: Network): RPCProvider {
-    return getRpcProvider(network)
+    return getRpcProvider({ ...network, rpcUrls: [this.getUrl(network)] })
   }
 
   private async sendEstimateReq(
