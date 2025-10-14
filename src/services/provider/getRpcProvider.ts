@@ -29,7 +29,7 @@ const getRpcProvider = (config: MinNetworkConfig) => {
     staticNetwork = Network.from(Number(config.chainId))
   }
 
-  if (config.consensusRpcUrl) {
+  if (config.preferHelios && config.consensusRpcUrl) {
     return new HeliosEthersProvider(config, rpcUrl, staticNetwork)
   }
 

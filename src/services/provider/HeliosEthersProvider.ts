@@ -7,11 +7,11 @@ import type { MinNetworkConfig } from './getRpcProvider'
 import { mapPerformActionToJsonRpc } from './mapPerformActionToJsonRpc'
 
 export class HeliosEthersProvider extends AbstractProvider implements RPCProvider {
-  config: MinNetworkConfig
+  readonly config: MinNetworkConfig
 
-  rpcUrl: string
+  readonly rpcUrl: string
 
-  heliosProviderPromise: Promise<HeliosProvider>
+  private heliosProviderPromise?: Promise<HeliosProvider>
 
   private cachedNetwork: Network | null = null
 
@@ -20,34 +20,48 @@ export class HeliosEthersProvider extends AbstractProvider implements RPCProvide
 
     this.config = config
     this.rpcUrl = rpcUrl
+  }
 
-    let kind: NetworkKind
+  private async getSyncedProvider() {
+    if (!this.heliosProviderPromise) {
+      let kind: NetworkKind
 
-    if (config.isOptimistic) {
-      kind = 'opstack'
-    } else if (config.isLinea) {
-      kind = 'linea'
-    } else {
-      kind = 'ethereum'
+      if (this.config.isOptimistic) {
+        kind = 'opstack'
+      } else if (this.config.isLinea) {
+        kind = 'linea'
+      } else {
+        kind = 'ethereum'
+      }
+
+      this.heliosProviderPromise = createHeliosProvider(
+        {
+          executionRpc: this.rpcUrl,
+          consensusRpc: this.config.consensusRpcUrl
+          // network: "mainnet" | "goerli" | "sepolia" | ...
+          // FIXME: network apparently defaults to mainnet, so we need to specify
+          //        otherwise?
+        },
+        kind
+      )
     }
 
-    this.heliosProviderPromise = createHeliosProvider(
-      {
-        executionRpc: rpcUrl,
-        consensusRpc: config.consensusRpcUrl
-        // network: "mainnet" | "goerli" | "sepolia" | ...
-        // FIXME: network apparently defaults to mainnet, so we need to specify
-        //        otherwise?
-      },
-      kind
-    )
+    const provider = await this.heliosProviderPromise
+    await provider.waitSynced()
+
+    return provider
+  }
+
+  // This takes about a minute. You can call this proactively if you want Helios to respond faster
+  // later.
+  async warmUp() {
+    await this.getSyncedProvider()
   }
 
   async _send(method: string, params: unknown[]) {
-    const heliosProvider = await this.heliosProviderPromise
-    await heliosProvider.waitSynced()
+    const provider = await this.getSyncedProvider()
 
-    return heliosProvider.request({ method, params })
+    return provider.request({ method, params })
   }
 
   send(method: string, params: any[] = []) {

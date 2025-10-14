@@ -4,15 +4,19 @@ import { networks } from '../../consts/networks'
 import { getRpcProvider } from './getRpcProvider'
 import { HeliosEthersProvider } from './HeliosEthersProvider'
 
+function getMainnetConfig() {
+  const ethereum = networks.find((n) => n.name === 'Ethereum')
+
+  if (!ethereum) {
+    throw new Error('Regular Ethereum network not found in networks')
+  }
+
+  return ethereum
+}
+
 describe('getRpcProvider', () => {
   test('should fetch tx on regular Ethereum network', async () => {
-    const regularEthereum = networks.find((n) => n.name === 'Ethereum' && !n.consensusRpcUrl)
-
-    if (!regularEthereum) {
-      throw new Error('Regular Ethereum network not found in networks')
-    }
-
-    const provider = getRpcProvider(regularEthereum)
+    const provider = getRpcProvider(getMainnetConfig())
 
     expect(provider).toBeInstanceOf(JsonRpcProvider)
 
@@ -24,16 +28,10 @@ describe('getRpcProvider', () => {
   })
 
   test('should fetch tx on Ethereum with Helios network', async () => {
-    const heliosNetwork = networks.find((n) => n.name === 'Ethereum with Helios')
-
-    if (!heliosNetwork) {
-      throw new Error('Ethereum with Helios network not found in networks')
-    }
-
-    expect(heliosNetwork.consensusRpcUrl).toBeDefined()
-    expect(heliosNetwork.consensusRpcUrl).toBe('https://ethereum.operationsolarstorm.org')
-
-    const provider = getRpcProvider(heliosNetwork)
+    const provider = getRpcProvider({
+      ...getMainnetConfig(),
+      preferHelios: true
+    })
 
     expect(provider).toBeInstanceOf(HeliosEthersProvider)
 
