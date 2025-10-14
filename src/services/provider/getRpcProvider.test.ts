@@ -5,7 +5,7 @@ import { getRpcProvider } from './getRpcProvider'
 import { HeliosEthersProvider } from './HeliosEthersProvider'
 
 describe('getRpcProvider', () => {
-  test('should return JsonRpcProvider for regular Ethereum network', async () => {
+  test('should fetch tx on regular Ethereum network', async () => {
     const regularEthereum = networks.find((n) => n.name === 'Ethereum' && !n.consensusRpcUrl)
 
     if (!regularEthereum) {
@@ -16,14 +16,14 @@ describe('getRpcProvider', () => {
 
     expect(provider).toBeInstanceOf(JsonRpcProvider)
 
-    const tx = await provider.send('eth_getTransactionByHash', [
+    const tx = await provider.getTransaction(
       '0xe1868fb0592e85c03203dc9336aecd222cf83984bad91fd797ad2f6f825d5bf9'
-    ])
+    )
 
-    expect(tx.to).toBe('0xe688b84b23f322a994a53dbf8e15fa82cdb71127')
+    expect(tx?.to?.toLowerCase()).toBe('0xe688b84b23f322a994a53dbf8e15fa82cdb71127')
   })
 
-  test('should return HeliosEthersProvider for Ethereum with Helios network', async () => {
+  test('should fetch tx on Ethereum with Helios network', async () => {
     const heliosNetwork = networks.find((n) => n.name === 'Ethereum with Helios')
 
     if (!heliosNetwork) {
@@ -39,10 +39,10 @@ describe('getRpcProvider', () => {
 
     // This can take a minute or so, but is dominated by initial sync time for
     // Helios. After sync, queries like this take 1000-3000ms.
-    const tx = await provider.send('eth_getTransactionByHash', [
+    const tx = await provider.getTransaction(
       '0xe1868fb0592e85c03203dc9336aecd222cf83984bad91fd797ad2f6f825d5bf9'
-    ])
+    )
 
-    expect(tx.to).toBe('0xe688b84b23f322a994a53dbf8e15fa82cdb71127')
+    expect(tx?.to?.toLowerCase()).toBe('0xe688b84b23f322a994a53dbf8e15fa82cdb71127')
   }, 300_000) // Long test due to sync time when using Helios
 })
