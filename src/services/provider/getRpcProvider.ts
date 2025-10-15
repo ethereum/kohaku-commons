@@ -29,7 +29,13 @@ const getRpcProvider = (config: MinNetworkConfig) => {
     staticNetwork = Network.from(Number(config.chainId))
   }
 
-  if (config.preferHelios && config.consensusRpcUrl) {
+  if (config.useHelios) {
+    if (!staticNetwork) {
+      const advice = config.chainId === undefined ? ' (likely fix: specify chainId)' : ''
+
+      throw new Error(`Cannot use Helios without staticNetwork${advice}`)
+    }
+
     return new HeliosEthersProvider(config, rpcUrl, staticNetwork)
   }
 
