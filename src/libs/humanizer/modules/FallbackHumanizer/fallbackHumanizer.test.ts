@@ -1,4 +1,4 @@
-import { HumanizerMeta } from 'libs/humanizer/interfaces'
+import { HumanizerMeta } from 'ambire-common/src/libs/humanizer/interfaces'
 
 import { describe, expect } from '@jest/globals'
 

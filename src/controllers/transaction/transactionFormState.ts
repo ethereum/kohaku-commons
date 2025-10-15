@@ -1,5 +1,5 @@
 import { formatUnits, isAddress } from 'ethers'
-import { HumanizerMeta } from 'libs/humanizer/interfaces'
+import { HumanizerMeta } from 'ambire-common/src/libs/humanizer/interfaces'
 
 import { FEE_COLLECTOR } from '../../consts/addresses'
 import { testnetNetworks } from '../../consts/testnetNetworks'

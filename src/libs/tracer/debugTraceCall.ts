@@ -1,6 +1,6 @@
 import { getAddress, Interface, JsonRpcProvider, toQuantity } from 'ethers'
 
-import { RPCProvider } from 'interfaces/provider'
+import { RPCProvider } from 'ambire-common/src/interfaces/provider'
 import AmbireAccount from '../../../contracts/compiled/AmbireAccount.json'
 import AmbireFactory from '../../../contracts/compiled/AmbireFactory.json'
 import BalanceGetter from '../../../contracts/compiled/BalanceGetter.json'

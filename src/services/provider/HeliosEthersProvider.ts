@@ -7,7 +7,7 @@ import {
   NetworkKind
 } from '@a16z/helios'
 import { AbstractProvider, Network, PerformActionRequest } from 'ethers'
-import { RPCProvider } from 'interfaces/provider'
+import { RPCProvider } from 'ambire-common/src/interfaces/provider'
 import type { MinNetworkConfig } from './getRpcProvider'
 import { mapPerformActionToJsonRpc } from './mapPerformActionToJsonRpc'
 

@@ -1,4 +1,4 @@
-import { SignMessageAction } from 'controllers/actions/actions'
+import { SignMessageAction } from 'ambire-common/src/controllers/actions/actions'
 import { TypedDataDomain, TypedDataField } from 'ethers'
 
 import { Session } from '../classes/session'

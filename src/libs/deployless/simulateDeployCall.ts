@@ -1,6 +1,6 @@
 import { ZeroAddress } from 'ethers'
 
-import { RPCProvider } from 'interfaces/provider'
+import { RPCProvider } from 'ambire-common/src/interfaces/provider'
 import AmbireFactory from '../../../contracts/compiled/AmbireFactory.json'
 import { AMBIRE_ACCOUNT_FACTORY, DEPLOYLESS_SIMULATION_FROM } from '../../consts/deploy'
 import { getSmartAccount, getSpoof } from '../account/account'

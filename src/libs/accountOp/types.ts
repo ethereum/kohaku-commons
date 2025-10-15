@@ -1,4 +1,4 @@
-import { Dapp } from 'interfaces/dapp'
+import { Dapp } from 'ambire-common/src/interfaces/dapp'
 
 import { Hex } from '../../interfaces/hex'
 import { Calls, UserRequest } from '../../interfaces/userRequest'

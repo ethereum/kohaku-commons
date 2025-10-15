@@ -18,7 +18,7 @@ import {
 
 import { MessageTypes, SignTypedDataVersion, TypedDataUtils } from '@metamask/eth-sig-util'
 
-import { RPCProvider } from 'interfaces/provider'
+import { RPCProvider } from 'ambire-common/src/interfaces/provider'
 import UniversalSigValidator from '../../../contracts/compiled/UniversalSigValidator.json'
 import { EIP7702Auth } from '../../consts/7702'
 import { PERMIT_2_ADDRESS, UNISWAP_UNIVERSAL_ROUTERS } from '../../consts/addresses'

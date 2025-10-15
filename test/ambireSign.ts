@@ -1,7 +1,7 @@
 import { TypedDataDomain } from 'ethers'
 import { ethers } from 'hardhat'
 
-import { PackedUserOperation } from 'libs/userOperation/types'
+import { PackedUserOperation } from 'ambire-common/src/libs/userOperation/types'
 import { abiCoder } from './config'
 
 /**

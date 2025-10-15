@@ -1,4 +1,4 @@
-import { EIP7702Auth } from 'consts/7702'
+import { EIP7702Auth } from 'ambire-common/src/consts/7702'
 import { AbiCoder, concat, hexlify, Interface, keccak256, Log, toBeHex } from 'ethers'
 import { Network } from '../../interfaces/network'
 

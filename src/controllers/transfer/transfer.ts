@@ -1,4 +1,4 @@
-import { ActivityController } from 'controllers/activity/activity'
+import { ActivityController } from 'ambire-common/src/controllers/activity/activity'
 import { formatUnits, isAddress, parseUnits } from 'ethers'
 
 import { FEE_COLLECTOR } from '../../consts/addresses'
