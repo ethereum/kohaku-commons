@@ -1,6 +1,11 @@
 /* eslint-disable no-underscore-dangle */
 
-import { createHeliosProvider, HeliosProvider, NetworkKind } from '@a16z/helios'
+import {
+  Network as HeliosNetworkName,
+  createHeliosProvider,
+  HeliosProvider,
+  NetworkKind
+} from '@a16z/helios'
 import { AbstractProvider, Network, PerformActionRequest } from 'ethers'
 import { RPCProvider } from 'interfaces/provider'
 import type { MinNetworkConfig } from './getRpcProvider'
@@ -13,13 +18,42 @@ export class HeliosEthersProvider extends AbstractProvider implements RPCProvide
 
   private heliosProviderPromise?: Promise<HeliosProvider>
 
-  private cachedNetwork: Network | null = null
+  private staticNetwork: Network
 
-  constructor(config: MinNetworkConfig, rpcUrl: string, staticNetwork?: Network) {
+  private heliosNetworkName: HeliosNetworkName
+
+  constructor(config: MinNetworkConfig, rpcUrl: string, staticNetwork: Network) {
     super(staticNetwork)
 
     this.config = config
     this.rpcUrl = rpcUrl
+    this.staticNetwork = staticNetwork
+    this.heliosNetworkName = HeliosEthersProvider.getHeliosNetworkName(staticNetwork.chainId)
+  }
+
+  static getHeliosNetworkName(chainId: bigint): HeliosNetworkName {
+    const map: Record<string, HeliosNetworkName | undefined> = {
+      1: 'mainnet',
+      5: 'goerli',
+      11155111: 'sepolia',
+      17000: 'holesky',
+      17001: 'hoodi',
+      10: 'op-mainnet',
+      8453: 'base',
+      4801: 'worldchain',
+      7777777: 'zora',
+      130: 'unichain',
+      59144: 'linea',
+      59141: 'linea-sepolia'
+    }
+
+    const name = map[`${chainId}`]
+
+    if (name === undefined) {
+      throw new Error(`Couldn't map chainId ${chainId} to a Helios network name`)
+    }
+
+    return name
   }
 
   private async getSyncedProvider() {
@@ -37,10 +71,8 @@ export class HeliosEthersProvider extends AbstractProvider implements RPCProvide
       this.heliosProviderPromise = createHeliosProvider(
         {
           executionRpc: this.rpcUrl,
-          consensusRpc: this.config.consensusRpcUrl
-          // network: "mainnet" | "goerli" | "sepolia" | ...
-          // FIXME: network apparently defaults to mainnet, so we need to specify
-          //        otherwise?
+          consensusRpc: this.config.consensusRpcUrl,
+          network: this.heliosNetworkName
         },
         kind
       )
@@ -77,26 +109,7 @@ export class HeliosEthersProvider extends AbstractProvider implements RPCProvide
   }
 
   async _detectNetwork(): Promise<Network> {
-    // Return cached network if available
-    if (this.cachedNetwork) {
-      return this.cachedNetwork
-    }
-
-    let network: Network
-
-    // If we have a chainId in config, create a static network from it
-    if (this.config.chainId) {
-      network = Network.from(Number(this.config.chainId))
-    } else {
-      // Fallback: query the network via eth_chainId RPC call
-      const chainIdHex = await this._send('eth_chainId', [])
-      const chainId = parseInt(chainIdHex as string, 16)
-      network = Network.from(chainId)
-    }
-
-    // Cache the network for future calls
-    this.cachedNetwork = network
-    return network
+    return this.staticNetwork
   }
 
   _perform<T = any>(req: PerformActionRequest): Promise<T> {
