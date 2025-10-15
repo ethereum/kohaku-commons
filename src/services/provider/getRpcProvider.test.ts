@@ -4,19 +4,19 @@ import { networks } from '../../consts/networks'
 import { getRpcProvider } from './getRpcProvider'
 import { HeliosEthersProvider } from './HeliosEthersProvider'
 
-function getMainnetConfig() {
-  const ethereum = networks.find((n) => n.name === 'Ethereum')
+function getConfigByName(name: string) {
+  const config = networks.find((n) => n.name === name)
 
-  if (!ethereum) {
-    throw new Error('Regular Ethereum network not found in networks')
+  if (!config) {
+    throw new Error(`Network ${JSON.stringify(name)} not found in networks`)
   }
 
-  return ethereum
+  return config
 }
 
 describe('getRpcProvider', () => {
-  test('should fetch tx on regular Ethereum network', async () => {
-    const provider = getRpcProvider(getMainnetConfig())
+  test('should fetch tx on mainnet', async () => {
+    const provider = getRpcProvider(getConfigByName('Ethereum'))
 
     expect(provider).toBeInstanceOf(JsonRpcProvider)
 
@@ -27,10 +27,10 @@ describe('getRpcProvider', () => {
     expect(tx?.to?.toLowerCase()).toBe('0xe688b84b23f322a994a53dbf8e15fa82cdb71127')
   })
 
-  test('should fetch tx on Ethereum with Helios network', async () => {
+  test('should fetch tx on mainnet with Helios', async () => {
     const provider = getRpcProvider({
-      ...getMainnetConfig(),
-      preferHelios: true
+      ...getConfigByName('Ethereum'),
+      useHelios: true
     })
 
     expect(provider).toBeInstanceOf(HeliosEthersProvider)
@@ -42,5 +42,20 @@ describe('getRpcProvider', () => {
     )
 
     expect(tx?.to?.toLowerCase()).toBe('0xe688b84b23f322a994a53dbf8e15fa82cdb71127')
-  }, 300_000) // Long test due to sync time when using Helios
+  }, 300_000) // Long test due to sync time when using Helios on mainnet
+
+  test('should fetch tx on optimism with Helios', async () => {
+    const provider = getRpcProvider({
+      ...getConfigByName('OP Mainnet'),
+      useHelios: true
+    })
+
+    expect(provider).toBeInstanceOf(HeliosEthersProvider)
+
+    const tx = await provider.getTransaction(
+      '0xbf0d550be064df4e6226e5b12c7660a2bbfec42ce8bd67f49b33cc8801b81fc2'
+    )
+
+    expect(tx?.to?.toLowerCase()).toBe('0x61d1e5e08c20b5628bc81f67952dbd01441cbffb')
+  })
 })
