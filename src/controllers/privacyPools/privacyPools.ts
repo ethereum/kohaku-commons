@@ -36,7 +36,6 @@ import { getAppSecret, getEip712Payload } from './derivation'
 import { relayerCall } from '../../libs/relayerCall/relayerCall'
 import { Fetch } from '../../interfaces/fetch'
 import { generateUuid } from '../../utils/uuid'
-import { mnemonicFromEntropy } from './utils/mnemonicFromEntropy'
 import wait from '../../utils/wait'
 
 const HARD_CODED_CURRENCY = 'usd'
@@ -808,8 +807,7 @@ export class PrivacyPoolsController extends EventEmitter {
     try {
       const appSecret = await this.#generateAppSecretInternal(appInfo)
 
-      const mnemonic = await mnemonicFromEntropy(toBytes(appSecret))
-      this.secret = mnemonic
+      this.secret = appSecret
       this.emitUpdate()
     } catch (error) {
       console.error('Failed to generate app secret:', error)
