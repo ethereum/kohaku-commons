@@ -748,6 +748,8 @@ export class PrivacyPoolsController extends EventEmitter {
       if (this.#updateQuoteId !== quoteId) return // Guard check after async
 
       // Fetch quote using the actual batchSize from form calculation
+      // Add unique requestId and timestamp to ensure relayer generates fresh, unique batchRelayData
+      // This prevents the "unauthorized access" error when doing multiple withdrawals with same parameters
       const quoteResponse = await this.#fetch(
         `${this.#privacyPoolsRelayerUrl}/relayer/batch/quote`,
         {
@@ -757,7 +759,9 @@ export class PrivacyPoolsController extends EventEmitter {
             chainId: selectedPoolInfo.chainId,
             batchSize: this.batchSize,
             totalAmount: parseUnits(this.withdrawalAmount, 18).toString(),
-            recipient: this.recipientAddress
+            recipient: this.recipientAddress,
+            requestId: generateUuid(), // Unique identifier for this quote request
+            timestamp: Date.now() // Timestamp to ensure uniqueness
           })
         }
       )
@@ -967,22 +971,22 @@ export class PrivacyPoolsController extends EventEmitter {
       data: params.withdrawal.data
     }
 
-    // Create a placeholder call for the confirmation modal
+    // Create a call that represents the withdrawal for display purposes
     // IMPORTANT: For Privacy Pools withdrawals via relayer, this Call is NEVER broadcast
     // The actual withdrawal is submitted to the relayer API in broadcastWithdrawal()
-    // We create a simple placeholder Call (0 ETH transfer) that will pass estimation
-    // This allows the SignAccountOpController to initialize and show the confirmation modal
-    const placeholderCall: Call = {
-      to: (this.recipientAddress || this.#selectedAccount.account.addr) as `0x${string}`,
-      value: 0n,
-      data: '0x' as `0x${string}`, // Empty data - simple ETH transfer
+    // We create a Call to the BatchRelayer (processooor) with the actual withdrawal amount
+    // so the humanizer displays it correctly as "Send X ETH to BatchRelayer"
+    const withdrawalCall: Call = {
+      to: params.withdrawal.processooor as `0x${string}`, // BatchRelayer contract address
+      value: parseUnits(this.withdrawalAmount, 18), // Actual withdrawal amount in wei
+      data: '0x' as `0x${string}`, // Simple ETH transfer
       fromUserRequestId: randomId()
     }
 
-    // Initialize SignAccountOpController with the placeholder call
+    // Initialize SignAccountOpController with the withdrawal call
     // This shows the confirmation modal with transaction details
     // When user confirms, broadcastWithdrawal() will be called instead of broadcasting this Call
-    await this.syncSignAccountOp([placeholderCall])
+    await this.syncSignAccountOp([withdrawalCall])
 
     this.emitUpdate()
   }
@@ -1110,6 +1114,10 @@ export class PrivacyPoolsController extends EventEmitter {
     this.#pendingWithdrawalProof = null
     this.#pendingWithdrawalParams = null
 
+    // Clean up form state and SignAccountOp after successful broadcast
+    // This ensures subsequent transactions start with a clean slate
+    this.#cleanupAfterBroadcast()
+
     this.#startTransactionPolling(BigInt(params.chainId), response.data.txId)
 
     this.emitUpdate()
@@ -1118,6 +1126,55 @@ export class PrivacyPoolsController extends EventEmitter {
       'DEBUG broadcastWithdrawal: after emitUpdate, latestBroadcastedAccountOp',
       this.latestBroadcastedAccountOp
     )
+  }
+
+  /**
+   * Cleanup form state and SignAccountOp after a transaction is broadcast
+   * This ensures subsequent transactions don't have stale state from previous transactions
+   * IMPORTANT: This does NOT clear latestBroadcastedAccountOp which is needed for tracking
+   */
+  #cleanupAfterBroadcast() {
+    // Clear form state
+    this.selectedToken = null
+    this.depositAmount = ''
+    this.withdrawalAmount = ''
+    this.addressState = { ...DEFAULT_ADDRESS_STATE }
+    this.amountInFiat = ''
+    this.amountFieldMode = 'token'
+    this.isRecipientAddressUnknown = false
+    this.isRecipientAddressUnknownAgreed = false
+    this.programmaticUpdateCounter = 0
+    this.validationFormMsgs = {
+      amount: { success: true, message: '' },
+      recipientAddress: { success: true, message: '' }
+    }
+    this.relayerQuote = null
+    this.updateQuoteStatus = 'INITIAL'
+    this.#updateQuoteId = undefined
+    this.batchSize = 1
+
+    // Stop quote refetch
+    this.#stopQuoteRefetch()
+
+    // Destroy SignAccountOp controller (no longer needed after broadcast)
+    // Unsubscribe from all previous subscriptions
+    this.#signAccountOpSubscriptions.forEach((unsubscribe) => unsubscribe())
+    this.#signAccountOpSubscriptions = []
+
+    if (this.#reestimateAbortController) {
+      this.#reestimateAbortController.abort()
+      this.#reestimateAbortController = null
+    }
+
+    if (this.signAccountOpController) {
+      this.signAccountOpController.reset()
+      this.signAccountOpController = null
+    }
+
+    this.hasProceeded = false
+
+    // Note: We do NOT clear latestBroadcastedAccountOp or latestBroadcastedToken
+    // as they are needed for the tracking screen
   }
 
   async resetSecret() {
@@ -1322,6 +1379,8 @@ export class PrivacyPoolsController extends EventEmitter {
               )
 
               this.emitUpdate()
+
+              // Stop polling - tracking screen will stay visible until user manually dismisses it
             }
             this.#stopTransactionPolling()
             break
@@ -1359,6 +1418,8 @@ export class PrivacyPoolsController extends EventEmitter {
               )
 
               this.emitUpdate()
+
+              // Stop polling - tracking screen will stay visible until user manually dismisses it
             }
 
             this.#stopTransactionPolling()
