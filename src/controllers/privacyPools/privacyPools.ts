@@ -38,6 +38,7 @@ import { Fetch } from '../../interfaces/fetch'
 import { generateUuid } from '../../utils/uuid'
 import { mnemonicFromEntropy } from './utils/mnemonicFromEntropy'
 import wait from '../../utils/wait'
+import { SubmittedAccountOp } from '../../libs/accountOp/submittedAccountOp'
 
 const HARD_CODED_CURRENCY = 'usd'
 
@@ -301,6 +302,136 @@ export class PrivacyPoolsController extends EventEmitter {
     )
 
     this.#initialPromiseLoaded = true
+
+    // TODO: REMOVE THIS - Mock transactions for testing
+    // Uncomment the line below to add mock Privacy Pools transactions for testing
+    // await this.#addMockTransactions()
+  }
+
+  /**
+   * TESTING ONLY: Adds mock Privacy Pools transactions to the activity list
+   * This method creates 3 mock transactions with different statuses to test
+   * the activity list integration. Remove or comment out after testing.
+   */
+  async #addMockTransactions() {
+    if (!this.#selectedAccount?.account) return
+
+    console.log('🧪 Adding mock Privacy Pools transactions for testing...')
+
+    const accountAddr = this.#selectedAccount.account.addr
+    const chainId = 11155111n // Sepolia
+
+    // Mock transaction 1: Pending (Broadcasted but not confirmed)
+    // Send 0.1 ETH to a recipient address
+    const mockTx1: SubmittedAccountOp = {
+      accountAddr,
+      chainId,
+      signingKeyAddr: null,
+      signingKeyType: null,
+      gasLimit: null,
+      gasFeePayment: null,
+      nonce: 0n,
+      signature:
+        '0x1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef' as `0x${string}`,
+      accountOpToExecuteBefore: null,
+      calls: [
+        {
+          to: '0x9876543210abcdef9876543210abcdef98765432' as `0x${string}`,
+          value: parseUnits('0.1', 18), // 0.1 ETH
+          data: '0x' as `0x${string}`,
+          fromUserRequestId: randomId()
+        }
+      ],
+      status: AccountOpStatus.BroadcastedButNotConfirmed,
+      txnId: '0xabc123def456abc123def456abc123def456abc123def456abc123def456abc1',
+      identifiedBy: {
+        type: 'PrivacyPoolsRelayer',
+        identifier: 'mock-relayer-id-001'
+      },
+      timestamp: Date.now() - 2 * 60 * 1000, // 2 minutes ago
+      meta: {
+        isPrivacyPoolsWithdrawal: true,
+        relayerId: 'mock-relayer-id-001'
+      }
+    }
+
+    // Mock transaction 2: Success
+    // Send 0.25 ETH to a recipient address
+    const mockTx2: SubmittedAccountOp = {
+      accountAddr,
+      chainId,
+      signingKeyAddr: null,
+      signingKeyType: null,
+      gasLimit: null,
+      gasFeePayment: null,
+      nonce: 0n,
+      signature:
+        '0xfedcba0987654321fedcba0987654321fedcba0987654321fedcba0987654321' as `0x${string}`,
+      accountOpToExecuteBefore: null,
+      calls: [
+        {
+          to: '0x1234567890abcdef1234567890abcdef12345678' as `0x${string}`,
+          value: parseUnits('0.25', 18), // 0.25 ETH
+          data: '0x' as `0x${string}`,
+          fromUserRequestId: randomId()
+        }
+      ],
+      status: AccountOpStatus.Success,
+      txnId: '0xdef789ghi012def789ghi012def789ghi012def789ghi012def789ghi012def7',
+      identifiedBy: {
+        type: 'PrivacyPoolsRelayer',
+        identifier: 'mock-relayer-id-002'
+      },
+      timestamp: Date.now() - 10 * 60 * 1000, // 10 minutes ago
+      meta: {
+        isPrivacyPoolsWithdrawal: true,
+        relayerId: 'mock-relayer-id-002'
+      }
+    }
+
+    // Mock transaction 3: Failure
+    // Send 0.5 ETH to a recipient address
+    const mockTx3: SubmittedAccountOp = {
+      accountAddr,
+      chainId,
+      signingKeyAddr: null,
+      signingKeyType: null,
+      gasLimit: null,
+      gasFeePayment: null,
+      nonce: 0n,
+      signature:
+        '0x111222333444555666777888999aaabbbcccdddeeefff000111222333444555' as `0x${string}`,
+      accountOpToExecuteBefore: null,
+      calls: [
+        {
+          to: '0xabcdefabcdefabcdefabcdefabcdefabcdefabcd' as `0x${string}`,
+          value: parseUnits('0.5', 18), // 0.5 ETH
+          data: '0x' as `0x${string}`,
+          fromUserRequestId: randomId()
+        }
+      ],
+      status: AccountOpStatus.Failure,
+      txnId: '0x999888777666555444333222111000fffeeeddcccbbbaaa999888777666555',
+      identifiedBy: {
+        type: 'PrivacyPoolsRelayer',
+        identifier: 'mock-relayer-id-003'
+      },
+      timestamp: Date.now() - 30 * 60 * 1000, // 30 minutes ago
+      meta: {
+        isPrivacyPoolsWithdrawal: true,
+        relayerId: 'mock-relayer-id-003'
+      }
+    }
+
+    // Add all mock transactions to the activity controller
+    await this.#activity.addAccountOp(mockTx1)
+    await this.#activity.addAccountOp(mockTx2)
+    await this.#activity.addAccountOp(mockTx3)
+
+    console.log('✅ Mock Privacy Pools transactions added successfully!')
+    console.log('   - Transaction 1: Pending (2 minutes ago)')
+    console.log('   - Transaction 2: Success (10 minutes ago)')
+    console.log('   - Transaction 3: Failure (30 minutes ago)')
   }
 
   async #generateAppSecretInternal(appInfo: string): Promise<string> {
@@ -937,33 +1068,51 @@ export class PrivacyPoolsController extends EventEmitter {
     console.log('DEBUG broadcastWithdrawal: txId', response.data.txId)
     console.log('DEBUG broadcastWithdrawal: relayerId', response.data.relayerId)
 
-    // Update latestBroadcastedAccountOp with actual transaction data from relayer
-    this.latestBroadcastedAccountOp = {
-      ...this.latestBroadcastedAccountOp,
-      signature: response.data.txId as `0x${string}`, // Use txHash as signature for tracking
-      // @ts-ignore
+    // Construct a proper SubmittedAccountOp for the activity controller
+    const submittedAccountOp: SubmittedAccountOp = {
+      accountAddr: this.#selectedAccount.account!.addr,
+      chainId: BigInt(params.chainId),
+      signingKeyAddr: null,
+      signingKeyType: null,
+      gasLimit: null,
+      gasFeePayment: null,
+      nonce: 0n, // Privacy pools don't use nonces
+      signature: response.data.txId as `0x${string}`,
+      accountOpToExecuteBefore: null,
+      calls: this.signAccountOpController?.accountOp.calls || [],
+      status: AccountOpStatus.BroadcastedButNotConfirmed,
       txnId: response.data.txId,
+      identifiedBy: {
+        type: 'PrivacyPoolsRelayer',
+        identifier: response.data.relayerId
+      },
+      timestamp: new Date().getTime(),
       meta: {
-        ...(this.latestBroadcastedAccountOp?.meta || {}),
-        // @ts-ignore - Update with actual relayer response data
-        txnId: response.data.txId,
         // @ts-ignore
+        isPrivacyPoolsWithdrawal: true,
         relayerId: response.data.relayerId
       }
     }
 
     console.log(
-      'DEBUG broadcastWithdrawal: Updated latestBroadcastedAccountOp with relayer response',
+      'DEBUG broadcastWithdrawal: Created SubmittedAccountOp for activity controller',
+      submittedAccountOp
+    )
+
+    await this.#activity.addAccountOp(submittedAccountOp)
+
+    // Update latestBroadcastedAccountOp to reference the same object for UI tracking
+    this.latestBroadcastedAccountOp = submittedAccountOp
+
+    console.log(
+      'DEBUG broadcastWithdrawal: Added to activity controller and updated latestBroadcastedAccountOp',
       this.latestBroadcastedAccountOp
     )
 
     this.#pendingWithdrawalProof = null
     this.#pendingWithdrawalParams = null
 
-    this.#startTransactionPolling(
-      BigInt(this.latestBroadcastedAccountOp?.chainId || 0),
-      response.data.txId
-    )
+    this.#startTransactionPolling(BigInt(params.chainId), response.data.txId)
 
     this.emitUpdate()
 
@@ -1154,12 +1303,26 @@ export class PrivacyPoolsController extends EventEmitter {
 
           // Check for timeout
           if (elapsed > TIMEOUT) {
+            const newStatus = AccountOpStatus.BroadcastButStuck
+            console.log('DEBUG: Transaction timeout, marking as stuck')
+
             if (this.latestBroadcastedAccountOp) {
+              // Update local tracking
               this.latestBroadcastedAccountOp = {
                 ...this.latestBroadcastedAccountOp,
                 // @ts-ignore
-                status: AccountOpStatus.BroadcastButStuck
+                status: newStatus
               }
+
+              // Update ActivityController for persistence
+              // eslint-disable-next-line no-await-in-loop
+              await this.#activity.updateAccountOpStatus(
+                this.#selectedAccount.account!.addr,
+                chainId,
+                txId,
+                newStatus
+              )
+
               this.emitUpdate()
             }
             this.#stopTransactionPolling()
@@ -1178,13 +1341,24 @@ export class PrivacyPoolsController extends EventEmitter {
 
             // Determine success based on receipt status
             const isSuccess = !!receipt.status
+            const newStatus = isSuccess ? AccountOpStatus.Success : AccountOpStatus.Failure
 
             if (this.latestBroadcastedAccountOp) {
+              // Update local tracking
               this.latestBroadcastedAccountOp = {
                 ...this.latestBroadcastedAccountOp,
                 // @ts-ignore - Update status based on receipt
-                status: isSuccess ? AccountOpStatus.Success : AccountOpStatus.Failure
+                status: newStatus
               }
+
+              // Update ActivityController for persistence
+              // eslint-disable-next-line no-await-in-loop
+              await this.#activity.updateAccountOpStatus(
+                this.#selectedAccount.account!.addr,
+                chainId,
+                txId,
+                newStatus
+              )
 
               this.emitUpdate()
             }
