@@ -542,6 +542,11 @@ export class ActivityController extends EventEmitter {
                 // as the statuses are already updated in the previous calls.
                 if (accountOp.status !== AccountOpStatus.BroadcastedButNotConfirmed) return
 
+                // Skip PrivacyPoolsRelayer transactions as they have their own polling mechanism
+                // in the PrivacyPoolsController. Trying to fetch status for these would fail
+                // and cause unnecessary loading states.
+                if (accountOp.identifiedBy.type === 'PrivacyPoolsRelayer') return
+
                 shouldEmitUpdate = true
 
                 if (newestOpTimestamp === undefined || newestOpTimestamp < accountOp.timestamp) {
@@ -773,6 +778,56 @@ export class ActivityController extends EventEmitter {
     this.emitUpdate()
 
     await this.#storage.set('accountsOps', this.#accountsOps)
+  }
+
+  /**
+   * Update the status of a specific AccountOp by txnId.
+   * This is useful for external controllers (like PrivacyPoolsController) that need to
+   * update transaction statuses based on their own polling mechanisms.
+   */
+  async updateAccountOpStatus(
+    accountAddr: string,
+    chainId: bigint,
+    txnId: string,
+    status: AccountOpStatus
+  ): Promise<void> {
+    await this.#initialLoadPromise
+
+    // Check if account and chain exist
+    if (!this.#accountsOps[accountAddr]) return
+    if (!this.#accountsOps[accountAddr][chainId.toString()]) return
+
+    // Find the operation by txnId
+    const opIndex = this.#accountsOps[accountAddr][chainId.toString()].findIndex(
+      (accOp) => accOp.txnId === txnId
+    )
+
+    if (opIndex === -1) return
+
+    // Hide confirmed banners first if the new status is a confirmed status
+    if (CONFIRMED_STATUSES.includes(status)) {
+      this.hideBannersOfConfirmedAccountOps()
+    }
+
+    // Update the status by reference
+    const updatedOp = updateOpStatus(
+      this.#accountsOps[accountAddr][chainId.toString()][opIndex],
+      status
+    )
+
+    if (updatedOp) {
+      // Sync filtered data
+      await this.syncFilteredAccountsOps()
+
+      // Update banners
+      this.updateAccountOpBanners()
+
+      // Save to storage
+      await this.#storage.set('accountsOps', this.#accountsOps)
+
+      // Emit update
+      this.emitUpdate()
+    }
   }
 
   get broadcastedButNotConfirmed(): SubmittedAccountOp[] {
