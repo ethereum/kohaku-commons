@@ -78,7 +78,7 @@ async function estimateGas(
         data: call.data,
         nonce: toQuantity(nonce)
       },
-      'pending'
+      'latest'
     ])
     .catch((e) => e)
   const callGetNonce = provider.getTransactionCount(from).catch(() => null)

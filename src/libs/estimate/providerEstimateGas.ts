@@ -68,7 +68,7 @@ export async function providerEstimateGas(
     data: properties.data,
     nonce: toQuantity(accountState.eoaNonce as bigint)
   }
-  const blockTag = 'pending'
+  const blockTag = 'latest'
   const stateOverride = {
     [DEPLOYLESS_SIMULATION_FROM]: {
       balance: '0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff'

@@ -1307,7 +1307,7 @@ export class MainController extends EventEmitter {
       // However, even if we don't trigger an update here, it's not a big problem,
       // as the account state will be updated anyway, and its update will be very recent.
       !this.accounts.areAccountStatesLoading && this.selectedAccount.account?.addr
-        ? this.accounts.updateAccountState(this.selectedAccount.account.addr, 'pending', chainIds)
+        ? this.accounts.updateAccountState(this.selectedAccount.account.addr, 'latest', chainIds)
         : Promise.resolve(),
       // `updateSelectedAccountPortfolio` doesn't rely on `withStatus` validation internally,
       // as the PortfolioController already exposes flags that are highly sufficient for the UX.
@@ -2158,7 +2158,7 @@ export class MainController extends EventEmitter {
       } else if (originalMessage.includes('user nonce') && isRelayer) {
         if (this.signAccountOp) {
           this.accounts
-            .updateAccountState(this.signAccountOp.accountOp.accountAddr, 'pending', [
+            .updateAccountState(this.signAccountOp.accountOp.accountAddr, 'latest', [
               this.signAccountOp.accountOp.chainId
             ])
             .then(() => this.signAccountOp?.simulate())

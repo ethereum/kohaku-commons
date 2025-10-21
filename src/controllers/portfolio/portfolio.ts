@@ -809,6 +809,9 @@ export class PortfolioController extends EventEmitter {
             specialErc20Hints
           }
 
+          // Helios cannot support pending blocks
+          const pendingBlockTag = network.useHelios ? 'latest' : 'pending'
+
           const [isSuccessfulLatestUpdate] = await Promise.all([
             // Latest state update
             this.updatePortfolioState(
@@ -827,7 +830,7 @@ export class PortfolioController extends EventEmitter {
               network,
               portfolioLib,
               {
-                blockTag: 'pending',
+                blockTag: pendingBlockTag,
                 ...(currentAccountOps &&
                   state && {
                     simulation: {
