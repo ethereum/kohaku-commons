@@ -24,7 +24,7 @@ export async function getAAVEPositions(
   const deploylessDeFiPositionsGetter = fromDescriptor(
     provider,
     DeFiPositionsDeploylessCode,
-    network.rpcNoStateOverride
+    !network.rpcNoStateOverride
   )
   const [[result0], [result1], [result2]] = await Promise.all([
     deploylessDeFiPositionsGetter.call('getAAVEPosition', [userAddr, poolAddr, 0, 15], {}),
