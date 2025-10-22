@@ -90,6 +90,7 @@ export interface Network {
   disabled?: boolean
   batchMaxCount?: number
   useHelios?: boolean
+  heliosCheckpoint?: string
 }
 
 export interface AddNetworkRequestParams {
