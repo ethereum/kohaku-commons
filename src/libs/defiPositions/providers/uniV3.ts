@@ -21,7 +21,7 @@ export async function getUniV3Positions(
   const deploylessDeFiPositionsGetter = fromDescriptor(
     provider,
     DeFiPositionsDeploylessCode,
-    network.rpcNoStateOverride
+    !network.rpcNoStateOverride
   )
   const [result] = await deploylessDeFiPositionsGetter.call('getUniV3Position', [
     userAddr,
