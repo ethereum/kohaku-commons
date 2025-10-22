@@ -1,17 +1,13 @@
-/* eslint-disable no-underscore-dangle */
-
 import {
   Network as HeliosNetworkName,
   createHeliosProvider,
   HeliosProvider,
   NetworkKind
 } from '@a16z/helios'
-import { AbstractProvider, Network, PerformActionRequest } from 'ethers'
-import { RPCProvider } from 'interfaces/provider'
+import { Eip1193Provider, Network } from 'ethers'
 import type { MinNetworkConfig } from './getRpcProvider'
-import { mapPerformActionToJsonRpc } from './mapPerformActionToJsonRpc'
 
-export class HeliosEthersProvider extends AbstractProvider implements RPCProvider {
+export class HeliosEthersProvider implements Eip1193Provider {
   readonly config: MinNetworkConfig
 
   readonly rpcUrl: string
@@ -23,8 +19,6 @@ export class HeliosEthersProvider extends AbstractProvider implements RPCProvide
   private heliosNetworkName: HeliosNetworkName
 
   constructor(config: MinNetworkConfig, rpcUrl: string, staticNetwork: Network) {
-    super(staticNetwork)
-
     this.config = config
     this.rpcUrl = rpcUrl
     this.staticNetwork = staticNetwork
@@ -90,29 +84,9 @@ export class HeliosEthersProvider extends AbstractProvider implements RPCProvide
     await this.getSyncedProvider()
   }
 
-  async _send(method: string, params: unknown[]) {
+  async request({ method, params }: { method: string; params: unknown[] }) {
     const provider = await this.getSyncedProvider()
 
     return provider.request({ method, params })
-  }
-
-  send(method: string, params: any[] = []) {
-    return this._send(method, params)
-  }
-
-  request({ method, params = [] }: { method: string; params: any[] }) {
-    return this._send(method, params)
-  }
-
-  _getConnection() {
-    return { url: this.rpcUrl }
-  }
-
-  async _detectNetwork(): Promise<Network> {
-    return this.staticNetwork
-  }
-
-  _perform<T = any>(req: PerformActionRequest): Promise<T> {
-    return this._send(...mapPerformActionToJsonRpc(req))
   }
 }

@@ -1,5 +1,6 @@
 import { JsonRpcProvider, Network } from 'ethers'
 
+import { BrowserProvider } from './BrowserProvider'
 import { Network as NetworkConfig } from '../../interfaces/network'
 import { HeliosEthersProvider } from './HeliosEthersProvider'
 
@@ -35,8 +36,8 @@ const getRpcProvider = (config: MinNetworkConfig) => {
 
       throw new Error(`Cannot use Helios without staticNetwork${advice}`)
     }
-
-    return new HeliosEthersProvider(config, rpcUrl, staticNetwork)
+    const heliosProvider = new HeliosEthersProvider(config, rpcUrl, staticNetwork)
+    return new BrowserProvider(heliosProvider, rpcUrl)
   }
 
   return new JsonRpcProvider(rpcUrl, staticNetwork, {
