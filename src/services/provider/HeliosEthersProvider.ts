@@ -66,6 +66,7 @@ export class HeliosEthersProvider implements Eip1193Provider {
         {
           executionRpc: this.rpcUrl,
           consensusRpc: this.config.consensusRpcUrl,
+          checkpoint: this.config.heliosCheckpoint,
           network: this.heliosNetworkName
         },
         kind
