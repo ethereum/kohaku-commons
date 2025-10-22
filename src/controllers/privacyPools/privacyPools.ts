@@ -44,6 +44,7 @@ const HARD_CODED_CURRENCY = 'usd'
 interface PrivacyPoolsFormUpdate {
   depositAmount?: string
   withdrawalAmount?: string
+  privacyProvider?: string
   seedPhrase?: string
   addressState?: AddressState
   importedSecretNote?: string
@@ -181,6 +182,8 @@ export class PrivacyPoolsController extends EventEmitter {
   secret: string | null = null
 
   seedPhrase: string = ''
+
+  privacyProvider: string = 'privacy-pools'
 
   addressState: AddressState = { ...DEFAULT_ADDRESS_STATE }
 
@@ -627,6 +630,7 @@ export class PrivacyPoolsController extends EventEmitter {
   update({
     depositAmount,
     withdrawalAmount,
+    privacyProvider,
     seedPhrase,
     addressState,
     importedSecretNote,
@@ -640,6 +644,10 @@ export class PrivacyPoolsController extends EventEmitter {
 
     if (typeof depositAmount === 'string') {
       this.depositAmount = depositAmount
+    }
+
+    if (typeof privacyProvider === 'string') {
+      this.privacyProvider = privacyProvider
     }
 
     if (typeof withdrawalAmount === 'string') {
