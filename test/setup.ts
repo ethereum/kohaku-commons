@@ -3,7 +3,6 @@
 jest.mock('../src/services/provider/getRpcProvider', () => {
   const originalModule = jest.requireActual('../src/services/provider/getRpcProvider')
 
-  console.log('Mocking getRpcProvider to bypass Helios')
   return {
     ...originalModule,
     getRpcProvider: (config: any) => {
