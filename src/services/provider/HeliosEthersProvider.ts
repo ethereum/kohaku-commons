@@ -4,7 +4,7 @@ import {
   HeliosProvider,
   NetworkKind
 } from '@a16z/helios'
-import { Eip1193Provider, Network } from 'ethers'
+import { Eip1193Provider, JsonRpcProvider, Network } from 'ethers'
 import type { MinNetworkConfig } from './getRpcProvider'
 
 export class HeliosEthersProvider implements Eip1193Provider {
@@ -12,11 +12,21 @@ export class HeliosEthersProvider implements Eip1193Provider {
 
   readonly rpcUrl: string
 
-  private heliosProviderPromise?: Promise<HeliosProvider>
+  private heliosInitPromise?: Promise<HeliosProvider>
 
   private staticNetwork: Network
 
   private heliosNetworkName: HeliosNetworkName
+
+  private SYNC_TIMEOUT_MS = 12000
+
+  private FALLBACK_COOLDOWN_MS = 10000
+
+  private syncedHelios: HeliosProvider | null = null
+
+  private lastFallbackTime: number | null = null
+
+  private fallbackProvider: JsonRpcProvider | null = null
 
   constructor(config: MinNetworkConfig, rpcUrl: string, staticNetwork: Network) {
     this.config = config
@@ -50,8 +60,27 @@ export class HeliosEthersProvider implements Eip1193Provider {
     return name
   }
 
-  private async getSyncedProvider() {
-    if (!this.heliosProviderPromise) {
+  private isInCooldown(): boolean {
+    if (this.lastFallbackTime === null) return false
+    return Date.now() - this.lastFallbackTime < this.FALLBACK_COOLDOWN_MS
+  }
+
+  private getFallbackProvider(): JsonRpcProvider {
+    if (!this.fallbackProvider) {
+      this.fallbackProvider = new JsonRpcProvider(this.rpcUrl, this.staticNetwork, {
+        staticNetwork: this.staticNetwork,
+        batchMaxCount: this.config.batchMaxCount
+      })
+    }
+    return this.fallbackProvider
+  }
+
+  private async getSyncedHelios(): Promise<HeliosProvider> {
+    if (this.syncedHelios) {
+      return this.syncedHelios
+    }
+
+    if (!this.heliosInitPromise) {
       let kind: NetworkKind
 
       if (this.config.isOptimistic) {
@@ -62,7 +91,7 @@ export class HeliosEthersProvider implements Eip1193Provider {
         kind = 'ethereum'
       }
 
-      this.heliosProviderPromise = createHeliosProvider(
+      this.heliosInitPromise = createHeliosProvider(
         {
           executionRpc: this.rpcUrl,
           consensusRpc: this.config.consensusRpcUrl,
@@ -73,21 +102,70 @@ export class HeliosEthersProvider implements Eip1193Provider {
       )
     }
 
-    const provider = await this.heliosProviderPromise
-    await provider.waitSynced()
+    let helios: HeliosProvider
+    try {
+      helios = await this.heliosInitPromise
+    } catch (e) {
+      // Provider creation failed; reset promise to allow retries and enter cooldown
+      this.heliosInitPromise = undefined
+      this.lastFallbackTime = Date.now()
+      throw e
+    }
 
-    return provider
+    let timer: ReturnType<typeof setTimeout> | undefined
+    const timeoutPromise = new Promise<never>((_, reject) => {
+      timer = setTimeout(() => {
+        reject(new Error('Helios sync timeout'))
+      }, this.SYNC_TIMEOUT_MS)
+    })
+
+    try {
+      await Promise.race([helios.waitSynced(), timeoutPromise])
+      this.syncedHelios = helios
+      return helios
+    } catch (error) {
+      this.lastFallbackTime = Date.now()
+
+      // Continue syncing in the background so it can complete later
+      helios
+        .waitSynced()
+        .then(() => {
+          this.syncedHelios = helios
+        })
+        .catch(() => {
+          // Ignore errors from background sync
+        })
+
+      throw error
+    } finally {
+      if (timer) clearTimeout(timer)
+    }
   }
 
   // This takes about a minute. You can call this proactively if you want Helios to respond faster
   // later.
   async warmUp() {
-    await this.getSyncedProvider()
+    try {
+      await this.getSyncedHelios()
+    } catch (error) {
+      // Ignore init/sync errors during warmup - fallback will handle it
+    }
   }
 
-  async request({ method, params }: { method: string; params: unknown[] }) {
-    const provider = await this.getSyncedProvider()
+  async request({ method, params }: { method: string; params: any[] }) {
+    if (this.syncedHelios) {
+      return this.syncedHelios.request({ method, params })
+    }
 
-    return provider.request({ method, params })
+    if (this.isInCooldown()) {
+      return this.getFallbackProvider().send(method, params ?? [])
+    }
+
+    try {
+      const helios = await this.getSyncedHelios()
+      return await helios.request({ method, params })
+    } catch (error) {
+      return this.getFallbackProvider().send(method, params ?? [])
+    }
   }
 }
