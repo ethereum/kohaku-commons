@@ -12,7 +12,7 @@ import { HDNodeWallet, Mnemonic } from 'ethers'
 import type { KeystoreController } from '../keystore/keystore'
 import { type ChainData, chainData, whitelistedChains } from './config'
 import EventEmitter from '../eventEmitter/eventEmitter'
-import { SignAccountOpController, SigningStatus } from '../signAccountOp/signAccountOp'
+import { SignAccountOpController } from '../signAccountOp/signAccountOp'
 import { getBaseAccount } from '../../libs/account/getBaseAccount'
 import { AccountOp } from '../../libs/accountOp/accountOp'
 import { AccountOpStatus, Call } from '../../libs/accountOp/types'
@@ -38,8 +38,20 @@ import { Fetch } from '../../interfaces/fetch'
 import { generateUuid } from '../../utils/uuid'
 import wait from '../../utils/wait'
 import { SubmittedAccountOp } from '../../libs/accountOp/submittedAccountOp'
+import { validateSendTransferAmount, validateSendTransferAddress } from '../../services/validations'
 
 const HARD_CODED_CURRENCY = 'usd'
+
+const DEFAULT_VALIDATION_FORM_MSGS = {
+  amount: {
+    success: false,
+    message: ''
+  },
+  recipientAddress: {
+    success: false,
+    message: ''
+  }
+}
 
 interface PrivacyPoolsFormUpdate {
   depositAmount?: string
@@ -211,14 +223,6 @@ export class PrivacyPoolsController extends EventEmitter {
   programmaticUpdateCounter: number = 0
 
   batchSize: number = 1
-
-  validationFormMsgs: {
-    amount: { success: boolean; message: string }
-    recipientAddress: { success: boolean; message: string }
-  } = {
-    amount: { success: true, message: '' },
-    recipientAddress: { success: true, message: '' }
-  }
 
   poolsByChain: PoolInfo[] = []
 
@@ -730,10 +734,6 @@ export class PrivacyPoolsController extends EventEmitter {
     this.isRecipientAddressUnknownAgreed = false
     this.latestBroadcastedToken = null
     this.programmaticUpdateCounter = 0
-    this.validationFormMsgs = {
-      amount: { success: true, message: '' },
-      recipientAddress: { success: true, message: '' }
-    }
     this.#isInitialized = false
     this.relayerQuote = null
     this.updateQuoteStatus = 'INITIAL'
@@ -963,10 +963,6 @@ export class PrivacyPoolsController extends EventEmitter {
     this.isRecipientAddressUnknown = false
     this.isRecipientAddressUnknownAgreed = false
     this.programmaticUpdateCounter = 0
-    this.validationFormMsgs = {
-      amount: { success: true, message: '' },
-      recipientAddress: { success: true, message: '' }
-    }
     this.relayerQuote = null
     this.updateQuoteStatus = 'INITIAL'
     this.#updateQuoteId = undefined
@@ -1327,6 +1323,53 @@ export class PrivacyPoolsController extends EventEmitter {
     return this.#selectedToken
   }
 
+  get validationFormMsgs() {
+    if (!this.isInitialized) return DEFAULT_VALIDATION_FORM_MSGS
+
+    const validationFormMsgsNew = { ...DEFAULT_VALIDATION_FORM_MSGS }
+
+    if (this.depositAmount && this.selectedToken && this.selectedToken.decimals) {
+      try {
+        const amountToValidate = formatUnits(
+          BigInt(this.depositAmount),
+          this.selectedToken.decimals
+        )
+        validationFormMsgsNew.amount = validateSendTransferAmount(
+          amountToValidate,
+          this.selectedToken
+        )
+      } catch (error) {
+        console.error('Failed to format deposit amount:', error)
+        validationFormMsgsNew.amount = {
+          success: false,
+          message: 'Invalid amount.'
+        }
+      }
+    }
+
+    // Validate recipient address (only needed for withdrawals)
+    if (this.withdrawalAmount && this.#selectedAccount?.account?.addr) {
+      const isEnsAddress = !!this.addressState.ensAddress
+
+      validationFormMsgsNew.recipientAddress = validateSendTransferAddress(
+        this.recipientAddress,
+        this.#selectedAccount.account.addr,
+        this.isRecipientAddressUnknownAgreed,
+        this.isRecipientAddressUnknown,
+        false, // isRecipientHumanizerKnownTokenOrSmartContract - not used in privacy pools
+        isEnsAddress,
+        this.addressState.isDomainResolving,
+        false, // isSWWarningVisible - not used in privacy pools
+        false // isSWWarningAgreed - not used in privacy pools
+      )
+    } else {
+      // For deposits, recipient address validation is not needed
+      validationFormMsgsNew.recipientAddress = { success: true, message: '' }
+    }
+
+    return validationFormMsgsNew
+  }
+
   get isInitialized(): boolean {
     return this.#isInitialized
   }
@@ -1355,7 +1398,8 @@ export class PrivacyPoolsController extends EventEmitter {
       initialPromiseLoaded: this.initialPromiseLoaded,
       hasPersistedState: this.hasPersistedState,
       selectedToken: this.selectedToken,
-      recipientAddress: this.recipientAddress
+      recipientAddress: this.recipientAddress,
+      validationFormMsgs: this.validationFormMsgs
     }
   }
 }
