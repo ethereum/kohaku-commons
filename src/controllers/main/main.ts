@@ -90,6 +90,7 @@ import { SwapAndBridgeController } from '../swapAndBridge/swapAndBridge'
 import { TransactionManagerController } from '../transaction/transactionManager'
 import { TransferController } from '../transfer/transfer'
 import { PrivacyPoolsController } from '../privacyPools/privacyPools'
+import { RailgunController } from '../railgun/railgun'
 
 const STATUS_WRAPPED_METHODS = {
   removeAccount: 'INITIAL',
@@ -159,6 +160,8 @@ export class MainController extends EventEmitter {
 
   privacyPools: PrivacyPoolsController
 
+  railgun: RailgunController
+
   signAccountOp: SignAccountOpController | null = null
 
   signAccOpInitError: string | null = null
@@ -213,6 +216,8 @@ export class MainController extends EventEmitter {
     velcroUrl,
     privacyPoolsAspUrl,
     privacyPoolsRelayerUrl,
+    railgunAspUrl,
+    railgunRelayerUrl,
     alchemyApiKey,
     featureFlags,
     swapApiKey,
@@ -228,6 +233,8 @@ export class MainController extends EventEmitter {
     velcroUrl: string
     privacyPoolsAspUrl: string
     privacyPoolsRelayerUrl: string
+    railgunAspUrl: string
+    railgunRelayerUrl: string
     alchemyApiKey: string
     featureFlags: Partial<FeatureFlags>
     swapApiKey: string
@@ -512,6 +519,22 @@ export class MainController extends EventEmitter {
       relayerUrl,
       privacyPoolsAspUrl,
       privacyPoolsRelayerUrl,
+      alchemyApiKey,
+      this.fetch
+    )
+
+    this.railgun = new RailgunController(
+      this.keystore,
+      this.accounts,
+      this.networks,
+      this.providers,
+      this.selectedAccount,
+      this.portfolio,
+      this.activity,
+      this.#externalSignerControllers,
+      relayerUrl,
+      railgunAspUrl,
+      railgunRelayerUrl,
       alchemyApiKey,
       this.fetch
     )

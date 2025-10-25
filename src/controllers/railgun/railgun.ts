@@ -41,7 +41,7 @@ import { SubmittedAccountOp } from '../../libs/accountOp/submittedAccountOp'
 
 const HARD_CODED_CURRENCY = 'usd'
 
-interface PrivacyPoolsFormUpdate {
+interface RailgunFormUpdate {
   depositAmount?: string
   withdrawalAmount?: string
   privacyProvider?: string
@@ -106,7 +106,7 @@ const DEFAULT_ADDRESS_STATE = {
   isDomainResolving: false
 }
 
-export class PrivacyPoolsController extends EventEmitter {
+export class RailgunController extends EventEmitter {
   #accounts: AccountsController | null = null
 
   #keystore: KeystoreController | null = null
@@ -121,7 +121,7 @@ export class PrivacyPoolsController extends EventEmitter {
 
   #initialPromiseLoaded: boolean = false
 
-  #privacyPoolsAspUrl: string
+  #railgunAspUrl: string
 
   #alchemyApiKey: string
 
@@ -157,7 +157,7 @@ export class PrivacyPoolsController extends EventEmitter {
 
   #relayerUrl: string
 
-  #privacyPoolsRelayerUrl: string
+  #railgunRelayerUrl: string
 
   #callRelayer: Function
 
@@ -183,7 +183,7 @@ export class PrivacyPoolsController extends EventEmitter {
 
   seedPhrase: string = ''
 
-  privacyProvider: string = 'privacy-pools'
+  privacyProvider: string = 'railgun'
 
   addressState: AddressState = { ...DEFAULT_ADDRESS_STATE }
 
@@ -241,8 +241,8 @@ export class PrivacyPoolsController extends EventEmitter {
     activity: ActivityController,
     externalSignerControllers: ExternalSignerControllers,
     relayerUrl: string,
-    privacyPoolsAspUrl: string,
-    privacyPoolsRelayerUrl: string,
+    railgunAspUrl: string,
+    railgunRelayerUrl: string,
     alchemyApiKey: string,
     fetch: Fetch
   ) {
@@ -251,7 +251,7 @@ export class PrivacyPoolsController extends EventEmitter {
     this.#keystore = keystore
     this.#accounts = accounts
     this.#selectedAccount = selectedAccount
-    this.#privacyPoolsAspUrl = privacyPoolsAspUrl
+    this.#railgunAspUrl = railgunAspUrl
     this.#alchemyApiKey = alchemyApiKey
     this.#accounts = accounts
     this.#networks = networks
@@ -261,11 +261,11 @@ export class PrivacyPoolsController extends EventEmitter {
     this.#activity = activity
     this.#externalSignerControllers = externalSignerControllers
     this.#relayerUrl = relayerUrl
-    this.#privacyPoolsRelayerUrl = privacyPoolsRelayerUrl
+    this.#railgunRelayerUrl = railgunRelayerUrl
     this.#fetch = fetch
 
     // Bind relayer call function
-    this.#callRelayer = relayerCall.bind({ url: privacyPoolsRelayerUrl, fetch })
+    this.#callRelayer = relayerCall.bind({ url: railgunRelayerUrl, fetch })
 
     this.#initialPromise = this.#load()
 
@@ -297,7 +297,7 @@ export class PrivacyPoolsController extends EventEmitter {
         chainId,
         {
           ...chain,
-          aspUrl: this.#privacyPoolsAspUrl,
+          aspUrl: this.#railgunAspUrl,
           rpcUrl: `${chain.rpcUrl}${this.#alchemyApiKey}`
         }
       ])
@@ -347,12 +347,12 @@ export class PrivacyPoolsController extends EventEmitter {
       status: AccountOpStatus.BroadcastedButNotConfirmed,
       txnId: '0xabc123def456abc123def456abc123def456abc123def456abc123def456abc1',
       identifiedBy: {
-        type: 'PrivacyPoolsRelayer',
+        type: 'RailgunRelayer',
         identifier: 'mock-relayer-id-001'
       },
       timestamp: Date.now() - 2 * 60 * 1000, // 2 minutes ago
       meta: {
-        isPrivacyPoolsWithdrawal: true,
+        isRailgunWithdrawal: true,
         relayerId: 'mock-relayer-id-001'
       }
     }
@@ -381,12 +381,12 @@ export class PrivacyPoolsController extends EventEmitter {
       status: AccountOpStatus.Success,
       txnId: '0xdef789ghi012def789ghi012def789ghi012def789ghi012def789ghi012def7',
       identifiedBy: {
-        type: 'PrivacyPoolsRelayer',
+        type: 'RailgunRelayer',
         identifier: 'mock-relayer-id-002'
       },
       timestamp: Date.now() - 10 * 60 * 1000, // 10 minutes ago
       meta: {
-        isPrivacyPoolsWithdrawal: true,
+        isRailgunWithdrawal: true,
         relayerId: 'mock-relayer-id-002'
       }
     }
@@ -415,12 +415,12 @@ export class PrivacyPoolsController extends EventEmitter {
       status: AccountOpStatus.Failure,
       txnId: '0x999888777666555444333222111000fffeeeddcccbbbaaa999888777666555',
       identifiedBy: {
-        type: 'PrivacyPoolsRelayer',
+        type: 'RailgunRelayer',
         identifier: 'mock-relayer-id-003'
       },
       timestamp: Date.now() - 30 * 60 * 1000, // 30 minutes ago
       meta: {
-        isPrivacyPoolsWithdrawal: true,
+        isRailgunWithdrawal: true,
         relayerId: 'mock-relayer-id-003'
       }
     }
@@ -437,11 +437,11 @@ export class PrivacyPoolsController extends EventEmitter {
   }
 
   async #generateAppSecretInternal(appInfo: string): Promise<string> {
-    const appIdentifier = 'privacypools.com'
+    const appIdentifier = 'railgun.com'
 
     // Step 1: Derive dedicated address and wallet
     const coinType = 9001
-    const privacyPoolsPath = `m/44'/${coinType}'/0'/0/0`
+    const railgunPath = `m/44'/${coinType}'/0'/0/0`
     const seedPhrase = await this.#getCurrentAccountSeed()
 
     if (!seedPhrase) {
@@ -449,7 +449,7 @@ export class PrivacyPoolsController extends EventEmitter {
     }
 
     const mnemonic = Mnemonic.fromPhrase(seedPhrase)
-    const wallet = HDNodeWallet.fromMnemonic(mnemonic, privacyPoolsPath)
+    const wallet = HDNodeWallet.fromMnemonic(mnemonic, railgunPath)
     const signerAddress = wallet.address as Address
     const privateKey = wallet.privateKey
 
@@ -462,7 +462,7 @@ export class PrivacyPoolsController extends EventEmitter {
       isExternallyStored: false,
       meta: {
         createdAt: Date.now(),
-        privacyPools: true,
+        railgun: true,
         temporary: true
       }
     }
@@ -639,8 +639,8 @@ export class PrivacyPoolsController extends EventEmitter {
     shouldSetMaxAmount,
     isRecipientAddressUnknownAgreed,
     batchSize
-  }: PrivacyPoolsFormUpdate) {
-    console.log('DEBUG: PRIVACY POOLS FORM UPDATE CONTROLLER UPDATE');
+  }: RailgunFormUpdate) {
+    console.log('DEBUG: RAILGUN FORM UPDATE CONTROLLER UPDATE');
     let shouldUpdateQuote = false
 
     if (typeof depositAmount === 'string') {
@@ -743,7 +743,7 @@ export class PrivacyPoolsController extends EventEmitter {
 
       // Fetch relayer details
       const detailsResponse = await this.#fetch(
-        `${this.#privacyPoolsRelayerUrl}/relayer/details?chainId=${
+        `${this.#railgunRelayerUrl}/relayer/details?chainId=${
           selectedPoolInfo.chainId
         }&assetAddress=0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE`
       )
@@ -760,7 +760,7 @@ export class PrivacyPoolsController extends EventEmitter {
       // Add unique requestId and timestamp to ensure relayer generates fresh, unique batchRelayData
       // This prevents the "unauthorized access" error when doing multiple withdrawals with same parameters
       const quoteResponse = await this.#fetch(
-        `${this.#privacyPoolsRelayerUrl}/relayer/batch/quote`,
+        `${this.#railgunRelayerUrl}/relayer/batch/quote`,
         {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -1039,7 +1039,7 @@ export class PrivacyPoolsController extends EventEmitter {
         // @ts-ignore
         relayerId: null, // Will be updated after relayer response
         // @ts-ignore
-        isPrivacyPoolsWithdrawal: true
+        isRailgunWithdrawal: true
       }
     }
 
@@ -1094,13 +1094,13 @@ export class PrivacyPoolsController extends EventEmitter {
       status: AccountOpStatus.BroadcastedButNotConfirmed,
       txnId: response.data.txId,
       identifiedBy: {
-        type: 'PrivacyPoolsRelayer',
+        type: 'RailgunRelayer',
         identifier: response.data.relayerId
       },
       timestamp: new Date().getTime(),
       meta: {
         // @ts-ignore
-        isPrivacyPoolsWithdrawal: true,
+        isRailgunWithdrawal: true,
         relayerId: response.data.relayerId
       }
     }
@@ -1220,7 +1220,7 @@ export class PrivacyPoolsController extends EventEmitter {
             poolAddress: this.#pendingWithdrawalParams.poolAddress,
             recipient: this.#pendingWithdrawalParams.recipient,
             totalAmount: this.#pendingWithdrawalParams.totalAmount,
-            isPrivacyPoolsWithdrawal: true
+            isRailgunWithdrawal: true
           }
         }
 
@@ -1257,7 +1257,7 @@ export class PrivacyPoolsController extends EventEmitter {
 
         if (this.signAccountOpController?.estimation.errors.length) {
           console.log(
-            'DEBUG: Errors on PrivacyPools re-estimate',
+            'DEBUG: Errors on Railgun re-estimate',
             this.signAccountOpController.estimation.errors
           )
         }
