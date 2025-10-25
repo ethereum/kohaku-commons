@@ -216,7 +216,6 @@ export class MainController extends EventEmitter {
     velcroUrl,
     privacyPoolsAspUrl,
     privacyPoolsRelayerUrl,
-    railgunAspUrl,
     railgunRelayerUrl,
     alchemyApiKey,
     featureFlags,
@@ -233,7 +232,6 @@ export class MainController extends EventEmitter {
     velcroUrl: string
     privacyPoolsAspUrl: string
     privacyPoolsRelayerUrl: string
-    railgunAspUrl: string
     railgunRelayerUrl: string
     alchemyApiKey: string
     featureFlags: Partial<FeatureFlags>
@@ -523,21 +521,7 @@ export class MainController extends EventEmitter {
       this.fetch
     )
 
-    this.railgun = new RailgunController(
-      this.keystore,
-      this.accounts,
-      this.networks,
-      this.providers,
-      this.selectedAccount,
-      this.portfolio,
-      this.activity,
-      this.#externalSignerControllers,
-      relayerUrl,
-      railgunAspUrl,
-      railgunRelayerUrl,
-      alchemyApiKey,
-      this.fetch
-    )
+    this.railgun = new RailgunController()
   }
 
   /**
