@@ -858,6 +858,10 @@ export class PrivacyPoolsController extends EventEmitter {
     this.resetForm()
   }
 
+  /**
+   * Resets all form state including initialization status.
+   * Use this for complete controller reset (e.g., when unloading screen).
+   */
   resetForm(shouldDestroyAccountOp = true) {
     this.selectedToken = null
     this.depositAmount = ''

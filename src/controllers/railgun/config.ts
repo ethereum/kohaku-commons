@@ -8,20 +8,6 @@ export const whitelistedChains = testnetChains
 
 export type ChainAssets = 'ETH' | 'USDC' | 'USDT'
 
-export interface PoolInfo {
-  chainId: number
-  address: Address
-  scope: bigint // Should this be of type Hash from pp-sdk?
-  deploymentBlock: bigint
-  entryPointAddress: Address
-  assetAddress: Address
-  maxDeposit: bigint
-  asset: ChainAssets
-  assetDecimals?: number
-  icon?: string
-  isStableAsset?: boolean // Includes stablecoins and yield-bearing stablecoins
-}
-
 export interface ChainData {
   [chainId: number]: {
     name: string
@@ -29,14 +15,11 @@ export interface ChainData {
     decimals: number
     image: string
     explorerUrl: string
-    sdkRpcUrl: string
     rpcUrl: string
-    aspUrl: string
     relayers: {
       name: string
       url: string
     }[]
-    poolInfo: PoolInfo[]
   }
 }
 
@@ -49,27 +32,11 @@ const testnetChainData: ChainData = {
     image: '',
     explorerUrl: sepolia.blockExplorers.default.url,
     // sdkRpcUrl: `/api/hypersync-rpc?chainId=11155111`, // Secure Hypersync proxy (relative URL)
-    sdkRpcUrl: 'https://sepolia.rpc.hypersync.xyz',
     rpcUrl: 'https://eth-sepolia.g.alchemy.com/v2/',
-    aspUrl: '',
     relayers: [
       { name: 'Testnet Relay', url: 'https://testnet-relayer.railgun.com' },
       { name: 'Freedom Relay', url: 'https://fastrelay.xyz' }
     ],
-    poolInfo: [
-      {
-        chainId: sepolia.id,
-        assetAddress: '0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE',
-        address: '0x644d5A2554d36e27509254F32ccfeBe8cd58861f',
-        scope: 13541713702858359530363969798588891965037210808099002426745892519913535247342n,
-        deploymentBlock: 8587019n,
-        entryPointAddress: '0x34A2068192b1297f2a7f85D7D8CdE66F8F0921cB',
-        maxDeposit: parseEther('1'),
-        asset: 'ETH',
-        assetDecimals: 18,
-        icon: '',
-        isStableAsset: false
-      }
       //   {
       //     chainId: sepolia.id,
       //     assetAddress: '0xaA8E23Fb1079EA71e0a56F48a2aA51851D8433D0',
@@ -94,7 +61,6 @@ const testnetChainData: ChainData = {
       //     assetDecimals: 6,
       //     isStableAsset: true,
       //   },
-    ]
   }
 }
 
