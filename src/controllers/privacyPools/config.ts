@@ -16,6 +16,9 @@ export interface PoolInfo {
   entryPointAddress: Address
   assetAddress: Address
   maxDeposit: bigint
+  // Get minWithdrawal amount from relayer endpoint
+  // https://relayer-staging-149184580131.us-east1.run.app/relayer/details?chainId=11155111&assetAddress=0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE
+  minWithdrawal: bigint
   asset: ChainAssets
   assetDecimals?: number
   icon?: string
@@ -65,6 +68,7 @@ const testnetChainData: ChainData = {
         deploymentBlock: 8587019n,
         entryPointAddress: '0x34A2068192b1297f2a7f85D7D8CdE66F8F0921cB',
         maxDeposit: parseEther('1'),
+        minWithdrawal: parseEther('0.001'),
         asset: 'ETH',
         assetDecimals: 18,
         icon: '',
