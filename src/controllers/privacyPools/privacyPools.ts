@@ -23,7 +23,8 @@ import { EstimationStatus } from '../estimation/types'
 import { AccountsController } from '../accounts/accounts'
 import { ActivityController } from '../activity/activity'
 import { isValidAddress } from '../../services/address'
-import { validateSendTransferAddress, validateSendTransferAmount } from '../../services/validations'
+import { validateSendTransferAddress } from '../../services/validations'
+import { validatePrivacyPoolsDepositAmount } from '../../services/privacyPools/validations'
 import { NetworksController } from '../networks/networks'
 import { PortfolioController } from '../portfolio/portfolio'
 import { ProvidersController } from '../providers/providers'
@@ -74,6 +75,8 @@ type PoolInfo = {
   address: Hex
   scope: Hash
   deploymentBlock: bigint
+  maxDeposit: bigint
+  minDeposit: bigint
 }
 
 export type BatchWithdrawalProof = {
@@ -290,7 +293,9 @@ export class PrivacyPoolsController extends EventEmitter {
         chainId: pool.chainId,
         address: pool.address,
         scope: pool.scope as Hash,
-        deploymentBlock: pool.deploymentBlock
+        deploymentBlock: pool.deploymentBlock,
+        maxDeposit: pool.maxDeposit,
+        minDeposit: pool.minDeposit
       }
     })
 
@@ -1331,10 +1336,24 @@ export class PrivacyPoolsController extends EventEmitter {
           BigInt(this.depositAmount),
           this.selectedToken.decimals
         )
-        validationFormMsgsNew.amount = validateSendTransferAmount(
-          amountToValidate,
-          this.selectedToken
+
+        const poolInfo = this.pools.find(
+          (pool) => BigInt(pool.chainId) === this.selectedToken.chainId
         )
+
+        if (poolInfo) {
+          validationFormMsgsNew.amount = validatePrivacyPoolsDepositAmount(
+            amountToValidate,
+            this.selectedToken,
+            poolInfo.minDeposit,
+            poolInfo.maxDeposit
+          )
+        } else {
+          validationFormMsgsNew.amount = {
+            success: false,
+            message: 'Pool configuration not found for this token.'
+          }
+        }
       } catch (error) {
         console.error('Failed to format deposit amount:', error)
         validationFormMsgsNew.amount = {
