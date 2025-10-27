@@ -22,6 +22,8 @@ import { randomId } from '../../libs/humanizer/utils'
 import { EstimationStatus } from '../estimation/types'
 import { AccountsController } from '../accounts/accounts'
 import { ActivityController } from '../activity/activity'
+import { isValidAddress } from '../../services/address'
+import { validateSendTransferAddress, validateSendTransferAmount } from '../../services/validations'
 import { NetworksController } from '../networks/networks'
 import { PortfolioController } from '../portfolio/portfolio'
 import { ProvidersController } from '../providers/providers'
@@ -38,7 +40,6 @@ import { Fetch } from '../../interfaces/fetch'
 import { generateUuid } from '../../utils/uuid'
 import wait from '../../utils/wait'
 import { SubmittedAccountOp } from '../../libs/accountOp/submittedAccountOp'
-import { validateSendTransferAmount, validateSendTransferAddress } from '../../services/validations'
 
 const HARD_CODED_CURRENCY = 'usd'
 
@@ -488,14 +489,12 @@ export class PrivacyPoolsController extends EventEmitter {
   }
 
   #getIsFormValidToFetchQuote() {
-    return (
-      !!this.withdrawalAmount &&
-      parseFloat(this.withdrawalAmount) > 0 &&
-      !!this.selectedToken &&
-      !!this.recipientAddress &&
-      this.validationFormMsgs.amount.success &&
-      this.validationFormMsgs.recipientAddress.success
-    )
+    const hasWithdrawalAmount = !!this.withdrawalAmount && parseFloat(this.withdrawalAmount) > 0
+    const hasSelectedToken = !!this.selectedToken
+    const hasRecipientAddress = !!this.recipientAddress
+    const isRecipientValid = this.validationFormMsgs.recipientAddress.success
+
+    return hasWithdrawalAmount && hasSelectedToken && hasRecipientAddress && isRecipientValid
   }
 
   update({
@@ -1324,8 +1323,6 @@ export class PrivacyPoolsController extends EventEmitter {
   }
 
   get validationFormMsgs() {
-    if (!this.isInitialized) return DEFAULT_VALIDATION_FORM_MSGS
-
     const validationFormMsgsNew = { ...DEFAULT_VALIDATION_FORM_MSGS }
 
     if (this.depositAmount && this.selectedToken && this.selectedToken.decimals) {
@@ -1347,24 +1344,32 @@ export class PrivacyPoolsController extends EventEmitter {
       }
     }
 
-    // Validate recipient address (only needed for withdrawals)
-    if (this.withdrawalAmount && this.#selectedAccount?.account?.addr) {
+    if (this.withdrawalAmount && this.#selectedAccount?.account?.addr && this.recipientAddress) {
       const isEnsAddress = !!this.addressState.ensAddress
 
-      validationFormMsgsNew.recipientAddress = validateSendTransferAddress(
-        this.recipientAddress,
-        this.#selectedAccount.account.addr,
-        this.isRecipientAddressUnknownAgreed,
-        this.isRecipientAddressUnknown,
-        false, // isRecipientHumanizerKnownTokenOrSmartContract - not used in privacy pools
-        isEnsAddress,
-        this.addressState.isDomainResolving,
-        false, // isSWWarningVisible - not used in privacy pools
-        false // isSWWarningAgreed - not used in privacy pools
-      )
-    } else {
-      // For deposits, recipient address validation is not needed
-      validationFormMsgsNew.recipientAddress = { success: true, message: '' }
+      if (!isValidAddress(this.recipientAddress)) {
+        validationFormMsgsNew.recipientAddress = {
+          success: false,
+          message: 'Invalid address format'
+        }
+      } else if (this.addressState.isDomainResolving) {
+        validationFormMsgsNew.recipientAddress = {
+          success: false,
+          message: 'Resolving domain...'
+        }
+      } else {
+        validationFormMsgsNew.recipientAddress = validateSendTransferAddress(
+          this.recipientAddress,
+          this.#selectedAccount.account.addr,
+          this.isRecipientAddressUnknownAgreed,
+          this.isRecipientAddressUnknown,
+          false, // isRecipientHumanizerKnownTokenOrSmartContract - not used in privacy pools
+          isEnsAddress,
+          this.addressState.isDomainResolving,
+          false, // isSWWarningVisible - not used in privacy pools
+          false // isSWWarningAgreed - not used in privacy pools
+        )
+      }
     }
 
     return validationFormMsgsNew
