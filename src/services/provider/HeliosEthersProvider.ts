@@ -14,6 +14,12 @@ export class HeliosEthersProvider implements Eip1193Provider {
 
   private heliosInitPromise?: Promise<HeliosProvider>
 
+  private heliosSyncPromise?: Promise<void>
+
+  private throwAfterTimeout?: Promise<void>
+
+  private timeoutTimerId?: NodeJS.Timeout
+
   private staticNetwork: Network
 
   private heliosNetworkName: HeliosNetworkName
@@ -60,6 +66,28 @@ export class HeliosEthersProvider implements Eip1193Provider {
     return name
   }
 
+  private initializeHelios(): Promise<HeliosProvider> {
+    let kind: NetworkKind
+
+    if (this.config.isOptimistic) {
+      kind = 'opstack'
+    } else if (this.config.isLinea) {
+      kind = 'linea'
+    } else {
+      kind = 'ethereum'
+    }
+
+    return createHeliosProvider(
+      {
+        executionRpc: this.rpcUrl,
+        consensusRpc: this.config.consensusRpcUrl,
+        checkpoint: this.config.heliosCheckpoint,
+        network: this.heliosNetworkName
+      },
+      kind
+    )
+  }
+
   private isInCooldown(): boolean {
     if (this.lastFallbackTime === null) return false
     return Date.now() - this.lastFallbackTime < this.FALLBACK_COOLDOWN_MS
@@ -75,70 +103,55 @@ export class HeliosEthersProvider implements Eip1193Provider {
     return this.fallbackProvider
   }
 
+  private setTimeoutAndThrow(): Promise<void> {
+    return new Promise<void>((_, reject) => {
+      this.timeoutTimerId = setTimeout(() => {
+        reject(new Error('Helios sync timeout'))
+      }, this.SYNC_TIMEOUT_MS)
+    })
+  }
+
   private async getSyncedHelios(): Promise<HeliosProvider> {
     if (this.syncedHelios) {
       return this.syncedHelios
     }
 
     if (!this.heliosInitPromise) {
-      let kind: NetworkKind
-
-      if (this.config.isOptimistic) {
-        kind = 'opstack'
-      } else if (this.config.isLinea) {
-        kind = 'linea'
-      } else {
-        kind = 'ethereum'
-      }
-
-      this.heliosInitPromise = createHeliosProvider(
-        {
-          executionRpc: this.rpcUrl,
-          consensusRpc: this.config.consensusRpcUrl,
-          checkpoint: this.config.heliosCheckpoint,
-          network: this.heliosNetworkName
-        },
-        kind
-      )
+      this.heliosInitPromise = this.initializeHelios()
     }
 
     let helios: HeliosProvider
     try {
       helios = await this.heliosInitPromise
     } catch (e) {
-      // Provider creation failed; reset promise to allow retries and enter cooldown
       this.heliosInitPromise = undefined
-      this.lastFallbackTime = Date.now()
-      throw e
+      throw new Error(`Helios initialization failed: ${(e as Error).message}`)
     }
 
-    let timer: ReturnType<typeof setTimeout> | undefined
-    const timeoutPromise = new Promise<never>((_, reject) => {
-      timer = setTimeout(() => {
-        reject(new Error('Helios sync timeout'))
-      }, this.SYNC_TIMEOUT_MS)
-    })
+    if (!this.heliosSyncPromise) {
+      this.heliosSyncPromise = helios.waitSynced()
+      this.heliosSyncPromise.catch(() => {
+        this.heliosSyncPromise = undefined
+      })
+    }
+
+    if (!this.throwAfterTimeout) {
+      this.throwAfterTimeout = this.setTimeoutAndThrow()
+    }
 
     try {
-      await Promise.race([helios.waitSynced(), timeoutPromise])
+      await Promise.race([this.heliosSyncPromise, this.throwAfterTimeout])
       this.syncedHelios = helios
       return helios
     } catch (error) {
+      this.throwAfterTimeout = undefined
       this.lastFallbackTime = Date.now()
-
-      // Continue syncing in the background so it can complete later
-      helios
-        .waitSynced()
-        .then(() => {
-          this.syncedHelios = helios
-        })
-        .catch(() => {
-          // Ignore errors from background sync
-        })
-
       throw error
     } finally {
-      if (timer) clearTimeout(timer)
+      if (this.timeoutTimerId) {
+        clearTimeout(this.timeoutTimerId)
+        this.timeoutTimerId = undefined
+      }
     }
   }
 
