@@ -26,7 +26,7 @@ const networks: Network[] = [
     wrappedAddr: '0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2',
     disableEstimateGas: true,
     useHelios: true,
-    heliosCheckpoint: '0xb7cb94df7e036b1f56e8d7086c5d08d62aad792824a7b4cdeef0549248f11220'
+    heliosCheckpoint: '0xe645d010dd9f2480e3b7a2e6632039c723378a7b5f9dd94f692dd61269b7f91d'
   },
   {
     name: 'Polygon',

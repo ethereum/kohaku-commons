@@ -194,8 +194,8 @@ export class Deployless {
     const callPromisedWithResolveTimeout = Promise.race([
       callPromise,
       new Promise((_resolve, reject) => {
-        // Custom providers may take longer to respond, so we set a longer timeout for them.
-        setTimeout(() => reject(new Error('rpc-timeout')), this.isProviderInvictus ? 15000 : 20000)
+        // Helios may take long to handle eth_call if RPC is slow, so we wait really long
+        setTimeout(() => reject(new Error('rpc-timeout')), 120000)
       })
     ])
 

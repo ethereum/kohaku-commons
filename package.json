@@ -14,7 +14,7 @@
     "check": "tsc --noEmit && echo 'FIXME: eslint is disabled here because there are too many issues.'"
   },
   "dependencies": {
-    "@a16z/helios": "0.9.4",
+    "@a16z/helios": "0.10.1",
     "@lifi/types": "^17.7.1",
     "@metamask/eth-sig-util": "^8.2.0",
     "aes-js": "^3.1.2",
