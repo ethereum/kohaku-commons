@@ -2114,7 +2114,7 @@ export class MainController extends EventEmitter {
         }
       } else if (originalMessage.includes('Failed to fetch') && isRelayer) {
         message =
-          'Currently, the Ambire relayer seems to be down. Please try again a few moments later or broadcast with an EOA account'
+          'Currently, the Kohaku relayer seems to be down. Please try again a few moments later or broadcast with an EOA account'
       } else if (originalMessage.includes('user nonce') && isRelayer) {
         if (this.signAccountOp) {
           this.accounts
