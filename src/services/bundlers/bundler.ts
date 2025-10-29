@@ -18,7 +18,7 @@ import { getCleanUserOp } from '../../libs/userOperation/userOperation'
 import { getRpcProvider } from '../provider'
 import { GasSpeeds, UserOpStatus } from './types'
 
-require('dotenv').config()
+// require('dotenv').config()
 
 export abstract class Bundler {
   /**

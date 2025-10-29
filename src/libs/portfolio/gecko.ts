@@ -1,11 +1,7 @@
-import dotenv from 'dotenv'
-
 import { geckoIdMapper } from '../../consts/coingecko'
 import { Network } from '../../interfaces/network'
 import { QueueElement, Request } from './batcher'
 import { paginate } from './pagination'
-
-dotenv.config()
 
 // max tokens per request; we seem to have faster results when it's lower
 const BATCH_LIMIT = 40

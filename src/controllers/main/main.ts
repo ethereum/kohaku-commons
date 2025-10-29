@@ -521,7 +521,17 @@ export class MainController extends EventEmitter {
       this.fetch
     )
 
-    this.railgun = new RailgunController()
+    this.railgun = new RailgunController(
+      this.keystore,
+      this.accounts,
+      this.networks,
+      this.providers,
+      this.selectedAccount,
+      this.portfolio,
+      this.activity,
+      this.#externalSignerControllers,
+      railgunRelayerUrl
+    )
   }
 
   /**

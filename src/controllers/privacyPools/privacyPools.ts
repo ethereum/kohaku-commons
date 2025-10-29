@@ -442,10 +442,12 @@ export class PrivacyPoolsController extends EventEmitter {
     // Step 1: Derive dedicated address and wallet
     const coinType = 9001
     const privacyPoolsPath = `m/44'/${coinType}'/0'/0/0`
+    console.log('DEBUG: PRIVACY POOLS: GET SEED PHRASE');
     const seedPhrase = await this.#getCurrentAccountSeed()
-
     if (!seedPhrase) {
       throw new Error('No seed phrase available for key derivation')
+    } else {
+      console.log('DEBUG: PRIVACY POOLS: SEED PHRASE FOUND');
     }
 
     const mnemonic = Mnemonic.fromPhrase(seedPhrase)
