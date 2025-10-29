@@ -211,6 +211,7 @@ export class PrivacyPoolsController extends EventEmitter {
     feeRecipient: string
     totalAmountWithFee: string
     data: string
+    estimatedFee: string
   } | null = null
 
   // Transfer/Withdrawal-specific properties
@@ -439,7 +440,6 @@ export class PrivacyPoolsController extends EventEmitter {
       undefined
     )
 
-    // propagate updates from signAccountOp here
     this.#signAccountOpSubscriptions.push(
       this.signAccountOpController.onUpdate(() => {
         this.emitUpdate()
@@ -571,7 +571,6 @@ export class PrivacyPoolsController extends EventEmitter {
 
     this.emitUpdate()
 
-    // Trigger debounced quote fetch when relevant fields change
     if (shouldUpdateQuote) {
       // eslint-disable-next-line @typescript-eslint/no-floating-promises
       this.updateQuote({ debounce: true })
@@ -598,13 +597,10 @@ export class PrivacyPoolsController extends EventEmitter {
     this.updateQuoteStatus = 'LOADING'
     this.emitUpdate()
 
-    // Debounce to avoid excessive calls
     if (debounce) await wait(500)
-    if (this.#updateQuoteId !== quoteId) return // Guard check
+    if (this.#updateQuoteId !== quoteId) return
 
     try {
-      // Get the selected pool info - we need chainId and other details
-      // For now, we'll use a placeholder. You'll need to pass or determine the correct pool info
       const selectedPoolInfo = this.pools[0] // TODO: Determine the correct pool based on selected token/chain
       if (!selectedPoolInfo) {
         throw new Error('No pool information available')
@@ -650,9 +646,8 @@ export class PrivacyPoolsController extends EventEmitter {
 
       const quote = await quoteResponse.json()
 
-      if (this.#updateQuoteId !== quoteId) return // Guard check after async
+      if (this.#updateQuoteId !== quoteId) return
 
-      // Store the quote
       this.relayerQuote = {
         relayFeeBPS: quote.relayFeeBPS,
         feeRecipient: getAddress(relayerDetails.feeReceiverAddress),
@@ -661,15 +656,13 @@ export class PrivacyPoolsController extends EventEmitter {
           parseFloat(this.withdrawalAmount) *
           (1 + quote.relayFeeBPS / 10000)
         ).toString(),
-        data: quote.batchFeeCommitment.batchRelayData
+        data: quote.batchFeeCommitment.batchRelayData,
+        estimatedFee: quote.estimatedFee
       }
 
-      console.log('DEBUG: relayerQuote', this.relayerQuote)
-
-      // Start periodic refetch to keep quote fresh (quotes are valid for ~20 seconds)
       this.#startQuoteRefetch()
     } catch (error) {
-      if (this.#updateQuoteId !== quoteId) return // Guard check
+      if (this.#updateQuoteId !== quoteId) return
 
       this.emitError({
         level: 'minor',
@@ -754,7 +747,6 @@ export class PrivacyPoolsController extends EventEmitter {
   }
 
   destroySignAccountOp() {
-    // Unsubscribe from all previous subscriptions
     this.#signAccountOpSubscriptions.forEach((unsubscribe) => unsubscribe())
     this.#signAccountOpSubscriptions = []
 
@@ -826,13 +818,7 @@ export class PrivacyPoolsController extends EventEmitter {
     }
   }
 
-  /**
-   * Directly broadcast a batch withdrawal with the provided proofs
-   * This method combines the previous prepare + broadcast steps into one
-   */
   async directBroadcastWithdrawal(params: BatchWithdrawalParams) {
-    console.log('DEBUG: directBroadcastWithdrawal called', params)
-
     if (!this.#selectedAccount?.account) {
       throw new Error('No account selected')
     }
@@ -875,13 +861,9 @@ export class PrivacyPoolsController extends EventEmitter {
 
     this.emitUpdate()
 
-    // Submit to relayer API
     const response = await this.submitBatchWithdrawal(params)
 
-    console.log('DEBUG directBroadcastWithdrawal: response', response)
-
     if (!response.success || !response.data) {
-      // Update status to failed so user can retry
       if (this.latestBroadcastedAccountOp) {
         this.latestBroadcastedAccountOp = {
           ...this.latestBroadcastedAccountOp,
@@ -893,18 +875,30 @@ export class PrivacyPoolsController extends EventEmitter {
       throw new Error(response.message || 'Withdrawal failed')
     }
 
-    console.log('DEBUG directBroadcastWithdrawal: response.data', response.data)
-    console.log('DEBUG directBroadcastWithdrawal: txId', response.data.txId)
-    console.log('DEBUG directBroadcastWithdrawal: relayerId', response.data.relayerId)
+    let gasFeePayment = null
+    if (this.relayerQuote && this.relayerQuote.estimatedFee) {
+      const feeAmount = BigInt(this.relayerQuote.estimatedFee)
 
-    // Construct a proper SubmittedAccountOp for the activity controller
+      gasFeePayment = {
+        isGasTank: false,
+        paidBy: this.#selectedAccount.account!.addr,
+        inToken: '0x0000000000000000000000000000000000000000', // ETH (native token)
+        feeTokenChainId: BigInt(params.chainId),
+        amount: feeAmount,
+        simulatedGasLimit: 0n, // Not applicable for relayer transactions
+        gasPrice: 0n, // Not applicable for relayer transactions
+        broadcastOption: 'PrivacyPoolsRelayer',
+        isSponsored: false
+      }
+    }
+
     const submittedAccountOp: SubmittedAccountOp = {
       accountAddr: this.#selectedAccount.account!.addr,
       chainId: BigInt(params.chainId),
       signingKeyAddr: null,
       signingKeyType: null,
       gasLimit: null,
-      gasFeePayment: null,
+      gasFeePayment,
       nonce: 0n, // Privacy pools don't use nonces
       signature: response.data.txId as `0x${string}`,
       accountOpToExecuteBefore: null,
@@ -919,45 +913,29 @@ export class PrivacyPoolsController extends EventEmitter {
       meta: {
         // @ts-ignore
         isPrivacyPoolsWithdrawal: true,
-        relayerId: response.data.relayerId
+        relayerId: response.data.relayerId,
+        // @ts-ignore - Store withdrawal details for rich humanization
+        withdrawalData: {
+          recipient: this.recipientAddress, // The user's intended recipient address
+          amount: parseUnits(this.withdrawalAmount, 18).toString(),
+          token: '0x0000000000000000000000000000000000000000', // ETH address (native token)
+          relayerAddress: params.withdrawal.processooor // BatchRelayer contract address
+        }
       }
     }
 
-    console.log(
-      'DEBUG directBroadcastWithdrawal: Created SubmittedAccountOp for activity controller',
-      submittedAccountOp
-    )
-
     await this.#activity.addAccountOp(submittedAccountOp)
 
-    // Update latestBroadcastedAccountOp to reference the same object for UI tracking
     this.latestBroadcastedAccountOp = submittedAccountOp
 
-    console.log(
-      'DEBUG directBroadcastWithdrawal: Added to activity controller and updated latestBroadcastedAccountOp',
-      this.latestBroadcastedAccountOp
-    )
-
-    // Clean up form state after successful broadcast
     this.#cleanupAfterBroadcast()
 
     this.#startTransactionPolling(BigInt(params.chainId), response.data.txId)
 
     this.emitUpdate()
-
-    console.log(
-      'DEBUG directBroadcastWithdrawal: after emitUpdate, latestBroadcastedAccountOp',
-      this.latestBroadcastedAccountOp
-    )
   }
 
-  /**
-   * Cleanup form state and SignAccountOp after a transaction is broadcast
-   * This ensures subsequent transactions don't have stale state from previous transactions
-   * IMPORTANT: This does NOT clear latestBroadcastedAccountOp which is needed for tracking
-   */
   #cleanupAfterBroadcast() {
-    // Clear form state
     this.selectedToken = null
     this.depositAmount = ''
     this.withdrawalAmount = ''
@@ -972,11 +950,8 @@ export class PrivacyPoolsController extends EventEmitter {
     this.#updateQuoteId = undefined
     this.batchSize = 1
 
-    // Stop quote refetch
     this.#stopQuoteRefetch()
 
-    // Destroy SignAccountOp controller (no longer needed after broadcast)
-    // Unsubscribe from all previous subscriptions
     this.#signAccountOpSubscriptions.forEach((unsubscribe) => unsubscribe())
     this.#signAccountOpSubscriptions = []
 
@@ -991,9 +966,6 @@ export class PrivacyPoolsController extends EventEmitter {
     }
 
     this.hasProceeded = false
-
-    // Note: We do NOT clear latestBroadcastedAccountOp or latestBroadcastedToken
-    // as they are needed for the tracking screen
   }
 
   async resetSecret() {
@@ -1008,7 +980,6 @@ export class PrivacyPoolsController extends EventEmitter {
       return
     }
 
-    // Build the calls based on your privacy pools operations
     const transactionCalls: Call[] = calls || []
 
     if (!transactionCalls.length) {
@@ -1024,12 +995,9 @@ export class PrivacyPoolsController extends EventEmitter {
       // whether to set latestBroadcastedAccountOp after successful broadcast
       this.shouldTrackLatestBroadcastedAccountOp = true
 
-      // If SignAccountOpController is already initialized, we just update it
       if (this.signAccountOpController) {
-        console.log('DEBUG syncSignAccountOp: updating existing controller')
         this.signAccountOpController.update({ calls: transactionCalls })
 
-        // Update withdrawal metadata if we have pending withdrawal
         if (this.#pendingWithdrawalParams) {
           if (!this.signAccountOpController.accountOp.meta) {
             this.signAccountOpController.accountOp.meta = {}
@@ -1047,12 +1015,7 @@ export class PrivacyPoolsController extends EventEmitter {
         return
       }
 
-      console.log('DEBUG syncSignAccountOp: creating new controller via #initSignAccOp')
       await this.#initSignAccOp(transactionCalls)
-      console.log(
-        'DEBUG syncSignAccountOp: after #initSignAccOp, controller exists?',
-        !!this.signAccountOpController
-      )
     } catch (error) {
       this.emitError({
         level: 'major',
@@ -1063,63 +1026,42 @@ export class PrivacyPoolsController extends EventEmitter {
   }
 
   async reestimate() {
-    console.log('DEBUG reestimate: called')
-    console.log('DEBUG reestimate: signAccountOpController exists?', !!this.signAccountOpController)
-    console.log(
-      'DEBUG reestimate: #reestimateAbortController exists?',
-      !!this.#reestimateAbortController
-    )
-
-    // Don't run the estimation loop if there is no SignAccountOpController or if the loop is already running.
     if (!this.signAccountOpController || this.#reestimateAbortController) {
-      console.log('DEBUG reestimate: early return - controller missing or abort controller exists')
       return
     }
 
-    console.log('DEBUG reestimate: starting new estimation loop')
     this.#reestimateAbortController = new AbortController()
     const signal = this.#reestimateAbortController!.signal
 
     const loop = async () => {
-      console.log('DEBUG reestimate loop: starting')
-
       // Trigger initial estimation immediately instead of waiting 30 seconds
-      console.log('DEBUG reestimate loop: calling initial estimate()')
       if (this.signAccountOpController?.estimation.status !== EstimationStatus.Loading) {
         // eslint-disable-next-line no-await-in-loop
         await this.signAccountOpController?.estimate()
       }
 
       while (!signal.aborted) {
-        console.log('DEBUG reestimate loop: waiting 30 seconds...')
         // eslint-disable-next-line no-await-in-loop
         await wait(30000)
         if (signal.aborted) break
 
-        console.log('DEBUG reestimate loop: calling estimate()')
         if (this.signAccountOpController?.estimation.status !== EstimationStatus.Loading) {
           // eslint-disable-next-line no-await-in-loop
           await this.signAccountOpController?.estimate()
         }
 
-        if (this.signAccountOpController?.estimation.errors.length) {
-          console.log(
-            'DEBUG: Errors on PrivacyPools re-estimate',
-            this.signAccountOpController.estimation.errors
-          )
-        }
+        // if (this.signAccountOpController?.estimation.errors.length) {
+        //   console.log(
+        //     'DEBUG: Errors on PrivacyPools re-estimate',
+        //     this.signAccountOpController.estimation.errors
+        //   )
+        // }
       }
-      console.log('DEBUG reestimate loop: ended')
     }
 
     loop()
   }
 
-  /**
-   * Submit batch withdrawal to relayer API
-   * This method sends the batch withdrawal proofs to the relayer endpoint
-   * instead of directly encoding and broadcasting the transaction
-   */
   async submitBatchWithdrawal(params: BatchWithdrawalParams): Promise<BatchWithdrawalResponse> {
     try {
       // Convert all bigint values to strings for JSON serialization
@@ -1238,19 +1180,16 @@ export class PrivacyPoolsController extends EventEmitter {
           const receipt = await provider.getTransactionReceipt(txId)
 
           if (receipt) {
-            // Determine success based on receipt status
             const isSuccess = !!receipt.status
             const newStatus = isSuccess ? AccountOpStatus.Success : AccountOpStatus.Failure
 
             if (this.latestBroadcastedAccountOp && this.#selectedAccount?.account) {
-              // Update local tracking
               this.latestBroadcastedAccountOp = {
                 ...this.latestBroadcastedAccountOp,
                 // @ts-ignore - Update status based on receipt
                 status: newStatus
               }
 
-              // Update ActivityController for persistence
               // eslint-disable-next-line no-await-in-loop
               await this.#activity.updateAccountOpStatus(
                 this.#selectedAccount.account.addr,
@@ -1310,7 +1249,6 @@ export class PrivacyPoolsController extends EventEmitter {
 
     this.#selectedToken = token
 
-    // Reset amounts when token changes
     if (
       prevSelectedToken?.address !== token?.address ||
       prevSelectedToken?.chainId !== token?.chainId
