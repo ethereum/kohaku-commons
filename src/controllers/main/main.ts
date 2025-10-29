@@ -79,6 +79,7 @@ import { SelectedAccountController } from '../selectedAccount/selectedAccount'
 import {
   SIGN_ACCOUNT_OP_MAIN,
   SIGN_ACCOUNT_OP_PRIVACY_POOLS,
+  SIGN_ACCOUNT_OP_RAILGUN,
   SIGN_ACCOUNT_OP_SWAP,
   SIGN_ACCOUNT_OP_TRANSFER,
   SignAccountOpType
@@ -767,14 +768,14 @@ export class MainController extends EventEmitter {
 
     let signAccountOp: SignAccountOpController | null
 
-    console.log('DEBUG: handleSignAndBroadcastAccountOp', type)
-
     if (type === SIGN_ACCOUNT_OP_MAIN) {
       signAccountOp = this.signAccountOp
     } else if (type === SIGN_ACCOUNT_OP_SWAP) {
       signAccountOp = this.swapAndBridge.signAccountOpController
     } else if (type === SIGN_ACCOUNT_OP_PRIVACY_POOLS) {
       signAccountOp = this.privacyPools.signAccountOpController
+    } else if (type === SIGN_ACCOUNT_OP_RAILGUN) {
+      signAccountOp = this.railgun.signAccountOpController
     } else {
       signAccountOp = this.transfer.signAccountOpController
     }
@@ -1796,7 +1797,11 @@ export class MainController extends EventEmitter {
           if (txnLength > 1) signAccountOp.update({ signedTransactionsCount: i + 1 })
 
           // send the txn to the relayer if it's an EOA sending for itself
-          if (accountOp.gasFeePayment.broadcastOption !== BROADCAST_OPTIONS.byOtherEOA) {
+          // Skip relayer for Railgun operations as they don't need relayer recording
+          if (
+            accountOp.gasFeePayment.broadcastOption !== BROADCAST_OPTIONS.byOtherEOA &&
+            type !== SIGN_ACCOUNT_OP_RAILGUN
+          ) {
             this.callRelayer(`/v2/eoaSubmitTxn/${accountOp.chainId}`, 'POST', {
               rawTxn: signedTxn
             }).catch((e: any) => {
@@ -2056,6 +2061,17 @@ export class MainController extends EventEmitter {
       // This prevents stale state issues on subsequent deposits
       // The SignAccountOpController will be destroyed when user navigates away
       this.privacyPools.resetForm(false)
+    }
+
+    if (type === SIGN_ACCOUNT_OP_RAILGUN) {
+      if (this.railgun.shouldTrackLatestBroadcastedAccountOp) {
+        this.railgun.latestBroadcastedAccountOp = submittedAccountOp
+      }
+
+      // Pass false to keep SignAccountOpController alive during tracking
+      // This prevents stale state issues on subsequent deposits
+      // The SignAccountOpController will be destroyed when user navigates away
+      this.railgun.resetForm(false)
     }
 
     await this.#notificationManager.create({
