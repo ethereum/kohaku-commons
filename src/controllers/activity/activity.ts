@@ -1,3 +1,4 @@
+import { zeroAddress } from 'viem'
 import { Account, AccountId } from '../../interfaces/account'
 import { Banner, BannerCategory, BannerType } from '../../interfaces/banner'
 import { Fetch } from '../../interfaces/fetch'
@@ -225,9 +226,17 @@ export class ActivityController extends EventEmitter {
     let filteredItems
 
     if (filters.chainId) {
-      filteredItems = this.#accountsOps[filters.account]?.[filters.chainId.toString()] || []
+      // Get account ops from both the active account and private account
+      const accountOps = this.#accountsOps[filters.account]?.[filters.chainId.toString()] || []
+      const privateAccountOps = this.#accountsOps[zeroAddress]?.[filters.chainId.toString()] || []
+      filteredItems = [...accountOps, ...privateAccountOps]
+      // Sort by timestamp in descending order
+      filteredItems.sort((a, b) => b.timestamp - a.timestamp)
     } else {
-      filteredItems = Object.values(this.#accountsOps[filters.account] || []).flat()
+      // Get account ops from both the active account and private account across all chains
+      const accountOps = Object.values(this.#accountsOps[filters.account] || []).flat()
+      const privateAccountOps = Object.values(this.#accountsOps[zeroAddress] || []).flat()
+      filteredItems = [...accountOps, ...privateAccountOps]
       // By default, #accountsOps are grouped by network and sorted in descending order.
       // However, when the network filter is omitted, #accountsOps from different networks are mixed,
       // requiring additional sorting to ensure they are also in descending order.
@@ -546,6 +555,10 @@ export class ActivityController extends EventEmitter {
                 // in the PrivacyPoolsController. Trying to fetch status for these would fail
                 // and cause unnecessary loading states.
                 if (accountOp.identifiedBy.type === 'PrivacyPoolsRelayer') return
+
+                // Skip ImportedAccount records as they are informational entries about account imports,
+                // not actual transactions that need status updates
+                if (accountOp.identifiedBy.type === 'ImportedAccount') return
 
                 shouldEmitUpdate = true
 
