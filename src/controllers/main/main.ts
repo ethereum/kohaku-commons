@@ -78,6 +78,7 @@ import { RequestsController } from '../requests/requests'
 import { SelectedAccountController } from '../selectedAccount/selectedAccount'
 import {
   SIGN_ACCOUNT_OP_MAIN,
+  SIGN_ACCOUNT_OP_PRIVACY_POOLS,
   SIGN_ACCOUNT_OP_SWAP,
   SIGN_ACCOUNT_OP_TRANSFER,
   SignAccountOpType
@@ -88,6 +89,7 @@ import { StorageController } from '../storage/storage'
 import { SwapAndBridgeController } from '../swapAndBridge/swapAndBridge'
 import { TransactionManagerController } from '../transaction/transactionManager'
 import { TransferController } from '../transfer/transfer'
+import { PrivacyPoolsController } from '../privacyPools/privacyPools'
 
 const STATUS_WRAPPED_METHODS = {
   removeAccount: 'INITIAL',
@@ -155,6 +157,8 @@ export class MainController extends EventEmitter {
 
   transfer: TransferController
 
+  privacyPools: PrivacyPoolsController
+
   signAccountOp: SignAccountOpController | null = null
 
   signAccOpInitError: string | null = null
@@ -207,6 +211,9 @@ export class MainController extends EventEmitter {
     fetch,
     relayerUrl,
     velcroUrl,
+    privacyPoolsAspUrl,
+    privacyPoolsRelayerUrl,
+    alchemyApiKey,
     featureFlags,
     swapApiKey,
     keystoreSigners,
@@ -219,6 +226,9 @@ export class MainController extends EventEmitter {
     fetch: Fetch
     relayerUrl: string
     velcroUrl: string
+    privacyPoolsAspUrl: string
+    privacyPoolsRelayerUrl: string
+    alchemyApiKey: string
     featureFlags: Partial<FeatureFlags>
     swapApiKey: string
     keystoreSigners: Partial<{ [key in Key['type']]: KeystoreSignerType }>
@@ -238,9 +248,7 @@ export class MainController extends EventEmitter {
     this.keystore = new KeystoreController(platform, this.storage, keystoreSigners, windowManager)
     this.#externalSignerControllers = externalSignerControllers
     this.networks = new NetworksController({
-      defaultNetworksMode: this.featureFlags.isFeatureEnabled('testnetMode')
-        ? 'testnet'
-        : 'mainnet',
+      defaultNetworksMode: 'testnet',
       storage: this.storage,
       fetch,
       relayerUrl,
@@ -365,6 +373,7 @@ export class MainController extends EventEmitter {
         await this.setContractsDeployedToTrueIfDeployed(network)
       }
     )
+
     this.swapAndBridge = new SwapAndBridgeController({
       accounts: this.accounts,
       keystore: this.keystore,
@@ -490,6 +499,22 @@ export class MainController extends EventEmitter {
         )
       }
     })
+
+    this.privacyPools = new PrivacyPoolsController(
+      this.keystore,
+      this.accounts,
+      this.networks,
+      this.providers,
+      this.selectedAccount,
+      this.portfolio,
+      this.activity,
+      this.#externalSignerControllers,
+      relayerUrl,
+      privacyPoolsAspUrl,
+      privacyPoolsRelayerUrl,
+      alchemyApiKey,
+      this.fetch
+    )
   }
 
   /**
@@ -725,10 +750,14 @@ export class MainController extends EventEmitter {
 
     let signAccountOp: SignAccountOpController | null
 
+    console.log('DEBUG: handleSignAndBroadcastAccountOp', type)
+
     if (type === SIGN_ACCOUNT_OP_MAIN) {
       signAccountOp = this.signAccountOp
     } else if (type === SIGN_ACCOUNT_OP_SWAP) {
       signAccountOp = this.swapAndBridge.signAccountOpController
+    } else if (type === SIGN_ACCOUNT_OP_PRIVACY_POOLS) {
+      signAccountOp = this.privacyPools.signAccountOpController
     } else {
       signAccountOp = this.transfer.signAccountOpController
     }
@@ -2001,6 +2030,17 @@ export class MainController extends EventEmitter {
       this.transfer.resetForm()
     }
 
+    if (type === SIGN_ACCOUNT_OP_PRIVACY_POOLS) {
+      if (this.privacyPools.shouldTrackLatestBroadcastedAccountOp) {
+        this.privacyPools.latestBroadcastedAccountOp = submittedAccountOp
+      }
+
+      // Pass false to keep SignAccountOpController alive during tracking
+      // This prevents stale state issues on subsequent deposits
+      // The SignAccountOpController will be destroyed when user navigates away
+      this.privacyPools.resetForm(false)
+    }
+
     await this.#notificationManager.create({
       title:
         // different count can happen only on isBasicAccountBroadcastingMultiple
@@ -2074,7 +2114,7 @@ export class MainController extends EventEmitter {
         }
       } else if (originalMessage.includes('Failed to fetch') && isRelayer) {
         message =
-          'Currently, the Ambire relayer seems to be down. Please try again a few moments later or broadcast with an EOA account'
+          'Currently, the Kohaku relayer seems to be down. Please try again a few moments later or broadcast with an EOA account'
       } else if (originalMessage.includes('user nonce') && isRelayer) {
         if (this.signAccountOp) {
           this.accounts
