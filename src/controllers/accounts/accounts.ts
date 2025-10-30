@@ -278,7 +278,7 @@ export class AccountsController extends EventEmitter {
     await this.#storage.set('accounts', this.accounts)
   }
 
-  async setDappAccess(addr: string, dappUrls: string[]) {
+  async setAssociatedDapps(addr: string, dappUrls: string[]) {
     this.accounts = this.accounts.map((acc) => {
       if (acc.addr !== addr) return acc
       return { ...acc, associatedDapps: dappUrls }
