@@ -530,6 +530,7 @@ export class MainController extends EventEmitter {
       this.selectedAccount,
       this.portfolio,
       this.activity,
+      this.storage,
       this.#externalSignerControllers,
       railgunRelayerUrl
     )
