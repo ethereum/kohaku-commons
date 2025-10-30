@@ -17,6 +17,9 @@ export interface Account {
   // Creation data; `null` in case of an EOA
   creation: AccountCreation | null
   preferences: AccountPreferences
+  // Associated dapp URLs for which the account will
+  // be suggested by default
+  associatedDapps: string[]
   email?: string
   newlyCreated?: boolean
   newlyAdded?: boolean
