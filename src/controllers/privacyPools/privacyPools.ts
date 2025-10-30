@@ -6,7 +6,8 @@ import {
   parseUnits,
   toBytes,
   type Address,
-  type Hex
+  type Hex,
+  zeroAddress
 } from 'viem'
 import { HDNodeWallet, Mnemonic } from 'ethers'
 import type { KeystoreController } from '../keystore/keystore'
@@ -932,6 +933,36 @@ export class PrivacyPoolsController extends EventEmitter {
 
     this.#startTransactionPolling(BigInt(params.chainId), response.data.txId)
 
+    this.emitUpdate()
+  }
+
+  async addImportedAccountToActivityController(accountName: string) {
+    if (!this.#selectedAccount?.account) {
+      throw new Error('No account selected')
+    }
+
+    // Construct a proper SubmittedAccountOp for the activity controller
+    const submittedAccountOp: SubmittedAccountOp = {
+      accountAddr: zeroAddress,
+      chainId: BigInt(11155111),
+      signingKeyAddr: null,
+      signingKeyType: null,
+      gasLimit: null,
+      gasFeePayment: null,
+      nonce: 0n, // Privacy pools don't use nonces
+      signature: '0x' as `0x${string}`,
+      accountOpToExecuteBefore: null,
+      calls: [],
+      status: AccountOpStatus.Success,
+      txnId: new Date().getTime().toString(),
+      identifiedBy: {
+        type: 'ImportedAccount',
+        identifier: accountName
+      },
+      timestamp: new Date().getTime()
+    }
+
+    await this.#activity.addAccountOp(submittedAccountOp)
     this.emitUpdate()
   }
 
