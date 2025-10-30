@@ -574,7 +574,7 @@ export class MainController extends EventEmitter {
     this.isOffline = false
     // call closeActionWindow while still on the currently selected account to allow proper
     // state cleanup of the controllers like actionsCtrl, signAccountOpCtrl, signMessageCtrl...
-    if (this.requests.actions?.currentAction?.type !== 'switchAccount') {
+    if (this.requests.actions?.currentAction?.type !== 'switchAccount' && this.requests.actions?.currentAction?.type !== 'dappRequest') {
       await this.requests.actions.closeActionWindow()
     }
     const swapAndBridgeSigningAction = this.requests.actions.visibleActionsQueue.find(
