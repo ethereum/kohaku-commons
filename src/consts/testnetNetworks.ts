@@ -11,7 +11,8 @@ const testnetNetworks: Network[] = [
     nativeAssetName: 'Ether',
     rpcUrls: [`https://eth-sepolia.g.alchemy.com/v2/${ALCHEMY_API_KEY}`],
     selectedRpcUrl: `https://eth-sepolia.g.alchemy.com/v2/${ALCHEMY_API_KEY}`,
-    rpcNoStateOverride: false,
+    consensusRpcUrl: 'http://unstable.sepolia.beacon-api.nimbus.team/',
+    rpcNoStateOverride: true,
     chainId: 11155111n,
     iconUrls: ['https://icons.llamao.fi/icons/chains/rsz_ethereum.jpg'],
     explorerUrl: 'https://sepolia.etherscan.io',
@@ -30,7 +31,9 @@ const testnetNetworks: Network[] = [
     hasSingleton: true,
     features: [],
     feeOptions: { is1559: true },
-    predefined: true
+    predefined: true,
+    useHelios: true,
+    heliosCheckpoint: '0xbd775fd308d103fb45e85969ebcc34b3fa506866d7050038cd855311bb61a404'
   }
   // {
   //   name: 'Base Sepolia',
