@@ -12,7 +12,7 @@ export class Gelato extends Bundler {
   }
 
   protected async getGasPrice(network: Network): Promise<GasSpeeds> {
-    const provider = this.getProvider(network)
+    const provider = this.getProvider(network, true)
     const prices: any = await provider.send('eth_getUserOperationGasPrice', [])
     return {
       slow: {
@@ -35,7 +35,7 @@ export class Gelato extends Bundler {
   }
 
   public async getStatus(network: Network, userOpHash: string): Promise<UserOpStatus> {
-    const provider = this.getProvider(network)
+    const provider = this.getProvider(network, true)
 
     const status = await provider.send('eth_getUserOperationByHash', [userOpHash]).catch((e) => {
       console.log('gelato eth_getUserOperationByHash returned an error')

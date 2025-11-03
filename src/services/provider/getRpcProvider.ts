@@ -8,7 +8,7 @@ export type MinNetworkConfig = Partial<NetworkConfig> & {
   rpcUrls: string[]
 }
 
-const getRpcProvider = (config: MinNetworkConfig) => {
+const getRpcProvider = (config: MinNetworkConfig, forceBypassHelios: boolean = false) => {
   if (!config.rpcUrls.length) {
     throw new Error('rpcUrls must be a non-empty array')
   }
@@ -30,7 +30,7 @@ const getRpcProvider = (config: MinNetworkConfig) => {
     staticNetwork = Network.from(Number(config.chainId))
   }
 
-  if (config.useHelios) {
+  if (config.useHelios && !forceBypassHelios) {
     if (!staticNetwork) {
       const advice = config.chainId === undefined ? ' (likely fix: specify chainId)' : ''
 
