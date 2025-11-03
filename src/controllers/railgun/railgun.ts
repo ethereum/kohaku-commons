@@ -1,5 +1,4 @@
 /* eslint-disable no-console */
-import type { Hex } from 'viem'
 import EventEmitter from '../eventEmitter/eventEmitter'
 import { SignAccountOpController } from '../signAccountOp/signAccountOp'
 import { AccountOp } from '../../libs/accountOp/accountOp'
@@ -12,6 +11,7 @@ import { NetworksController } from '../networks/networks'
 import { ProvidersController } from '../providers/providers'
 import { PortfolioController } from '../portfolio/portfolio'
 import { ActivityController } from '../activity/activity'
+import { StorageController } from '../storage/storage'
 import { ExternalSignerControllers } from '../../interfaces/keystore'
 import { getBaseAccount } from '../../libs/account/getBaseAccount'
 import { getAmbirePaymasterService } from '../../libs/erc7677/erc7677'
@@ -33,6 +33,24 @@ export type RailgunAccountKeys = {
   shieldKeySigner: string
 }
 
+/**
+ * This is the shape we’ll persist to extension storage.
+ * The React layer will produce it from the real RailgunAccount and call
+ * RAILGUN_CONTROLLER_SET_ACCOUNT_CACHE with it.
+ */
+export type RailgunAccountCache = {
+  merkleTrees: any
+  noteBooks: any
+  lastSyncedBlock: number
+}
+
+export type RailgunAccountCacheFetch = {
+  zkAddress: string
+  chainId: number
+  cache: RailgunAccountCache | null
+  fetchedAt: number
+}
+
 const DEFAULT_ADDRESS_STATE = {
   fieldValue: '',
   ensAddress: '',
@@ -41,71 +59,51 @@ const DEFAULT_ADDRESS_STATE = {
 
 export class RailgunController extends EventEmitter {
   #accounts: AccountsController | null = null
-
   #keystore: KeystoreController | null = null
-
   #selectedAccount: SelectedAccountController | null = null
-
+  #storage: StorageController
   #networks: NetworksController
-
   #providers: ProvidersController
-
   #portfolio: PortfolioController
-
   #activity: ActivityController
-
   #externalSignerControllers: ExternalSignerControllers
-
   #relayerUrl: string
+  infuraApiKey: string
 
   #signAccountOpSubscriptions: Function[] = []
-
   #reestimateAbortController: AbortController | null = null
 
   #isInitialized: boolean = false
-
   #initializationError: string | null = null
-
   #initialPromise: Promise<void> | null = null
-
   #initialPromiseLoaded: boolean = false
-
-  shouldTrackLatestBroadcastedAccountOp: boolean = true
-
-  signAccountOpController: SignAccountOpController | null = null
-
-  latestBroadcastedAccountOp: AccountOp | null = null
-
-  hasProceeded: boolean = false
-
-  depositAmount: string = ''
-
-  privacyProvider: string = 'railgun'
-
-  chainId: number = 11155111 // Default to Sepolia
-
-  addressState: AddressState = { ...DEFAULT_ADDRESS_STATE }
 
   #selectedToken: any = null
 
-  // Transfer/Withdrawal-specific properties (kept for interface compatibility)
+  // form-ish / UI-ish state we already had
+  shouldTrackLatestBroadcastedAccountOp: boolean = true
+  signAccountOpController: SignAccountOpController | null = null
+  latestBroadcastedAccountOp: AccountOp | null = null
+  hasProceeded: boolean = false
+  depositAmount: string = ''
+  privacyProvider: string = 'railgun'
+  chainId: number = 11155111 // Sepolia
+  addressState: AddressState = { ...DEFAULT_ADDRESS_STATE }
   amountInFiat: string = ''
-
   amountFieldMode: 'token' | 'fiat' = 'token'
-
   isRecipientAddressUnknown: boolean = false
-
   isRecipientAddressUnknownAgreed: boolean = false
-
   latestBroadcastedToken: any = null
-
   programmaticUpdateCounter: number = 0
-
   withdrawalAmount: string = ''
-
   maxAmount: string = ''
 
-  currentRailgunKeys: RailgunAccountKeys | null = null
+  // railgun-specific
+  defaultRailgunKeys: RailgunAccountKeys | null = null
+
+  // every "get" must end up here so popup can see it
+  derivedRailgunKeysByIndex: Record<number, RailgunAccountKeys> = {}
+  lastFetchedRailgunAccountCache: RailgunAccountCacheFetch | null = null
 
   validationFormMsgs: {
     amount: { success: boolean; message: string }
@@ -123,8 +121,10 @@ export class RailgunController extends EventEmitter {
     selectedAccount: SelectedAccountController,
     portfolio: PortfolioController,
     activity: ActivityController,
+    storage: StorageController,
     externalSignerControllers: ExternalSignerControllers,
-    relayerUrl: string
+    relayerUrl: string,
+    infuraApiKey: string
   ) {
     super()
 
@@ -135,39 +135,60 @@ export class RailgunController extends EventEmitter {
     this.#selectedAccount = selectedAccount
     this.#portfolio = portfolio
     this.#activity = activity
+    this.#storage = storage
     this.#externalSignerControllers = externalSignerControllers
     this.#relayerUrl = relayerUrl
+    this.infuraApiKey = infuraApiKey
 
+    // old behaviour – we wait for selectedAccount to finish loading
     this.#initialPromise = this.#load()
-    
+
     this.emitUpdate()
   }
 
   async #load() {
-    // Minimal initialization for Railgun
-    // Railgun-specific SDK and configuration will be added here later
     await this.#selectedAccount?.initialLoadPromise
     this.#initialPromiseLoaded = true
   }
 
+  // ─────────────────────────────────────────────
+  // KEY DERIVATION (controller-only)
+  // ─────────────────────────────────────────────
   async #getRailgunKeysInternal(index: number): Promise<RailgunAccountKeys> {
-    const RAILGUN_VIEWING_DERIVATION_TEMPLATE = "m/420'/1984'/0'/0'/<account>'" as HD_PATH_TEMPLATE_TYPE
-    const RAILGUN_SPENDING_DERIVATION_TEMPLATE = "m/44'/1984'/0'/0'/<account>'" as HD_PATH_TEMPLATE_TYPE
-    
-    console.log('DEBUG: RAILGUN: GET SEED PHRASE');
+    const RAILGUN_VIEWING_DERIVATION_TEMPLATE =
+      "m/420'/1984'/0'/0'/<account>'" as HD_PATH_TEMPLATE_TYPE
+    const RAILGUN_SPENDING_DERIVATION_TEMPLATE =
+      "m/44'/1984'/0'/0'/<account>'" as HD_PATH_TEMPLATE_TYPE
+
+    console.log('DEBUG: RAILGUN: GET SEED PHRASE')
     const seedPhrase = await this.#getCurrentAccountSeed()
 
     if (!seedPhrase) {
       throw new Error('No seed phrase available for key derivation')
-    } else {
-      console.log('DEBUG: RAILGUN: SEED PHRASE FOUND');
     }
 
-    const viewingKey = getPrivateKeyFromSeed(seedPhrase, null, index, RAILGUN_VIEWING_DERIVATION_TEMPLATE)
-    const spendingKey = getPrivateKeyFromSeed(seedPhrase, null, index, RAILGUN_SPENDING_DERIVATION_TEMPLATE)
-    const shieldKeySigner = getPrivateKeyFromSeed(seedPhrase, null, 0, BIP44_STANDARD_DERIVATION_TEMPLATE)
-    
-    return {spendingKey, viewingKey, shieldKeySigner};
+    console.log('DEBUG: RAILGUN: SEED PHRASE FOUND')
+
+    const viewingKey = getPrivateKeyFromSeed(
+      seedPhrase,
+      null,
+      index,
+      RAILGUN_VIEWING_DERIVATION_TEMPLATE
+    )
+    const spendingKey = getPrivateKeyFromSeed(
+      seedPhrase,
+      null,
+      index,
+      RAILGUN_SPENDING_DERIVATION_TEMPLATE
+    )
+    const shieldKeySigner = getPrivateKeyFromSeed(
+      seedPhrase,
+      null,
+      index,
+      BIP44_STANDARD_DERIVATION_TEMPLATE
+    )
+
+    return { spendingKey, viewingKey, shieldKeySigner }
   }
 
   async #getCurrentAccountSeed(): Promise<string | null> {
@@ -177,8 +198,9 @@ export class RailgunController extends EventEmitter {
       }
 
       const accountKeys = this.#keystore.getAccountKeys(this.#selectedAccount.account)
-
-      const internalKey = accountKeys.find((key) => key.type === 'internal' && key.meta?.fromSeedId)
+      const internalKey = accountKeys.find(
+        (key) => key.type === 'internal' && key.meta?.fromSeedId
+      )
 
       if (!internalKey?.meta?.fromSeedId) {
         return null
@@ -192,12 +214,84 @@ export class RailgunController extends EventEmitter {
     }
   }
 
+  async getDefaultRailgunKeys(): Promise<RailgunAccountKeys> {
+    if (!this.defaultRailgunKeys) {
+      const keys = await this.#getRailgunKeysInternal(0)
+      this.defaultRailgunKeys = keys
+      this.derivedRailgunKeysByIndex[0] = keys
+      this.emitUpdate()
+    }
+    return this.defaultRailgunKeys
+  }
+
+  async deriveRailgunKeys(index: number): Promise<RailgunAccountKeys> {
+    console.log('[BG][RAILGUN] deriveRailgunKeys called', index)
+    try {
+      const res =
+        index === 0 ? await this.getDefaultRailgunKeys() : await this.#getRailgunKeysInternal(index)
+      console.log('[BG][RAILGUN] deriveRailgunKeys returning', res)
+      this.derivedRailgunKeysByIndex[index] = res
+      this.emitUpdate()
+      return res
+    } catch (err) {
+      console.error('[BG][RAILGUN] deriveRailgunKeys failed', err)
+      throw err
+    }
+  }
+
+  // ─────────────────────────────────────────────
+  // CACHE HELPERS (UI will call these)
+  // ─────────────────────────────────────────────
+
+  #getRailgunCacheKey(zkAddress: string, chainId: number): string {
+    return `railgun:account:${zkAddress}:${chainId}`
+  }
+
+  async getRailgunAccountCache(
+    zkAddress: string,
+    chainId: number
+  ): Promise<RailgunAccountCache | null> {
+    const key = this.#getRailgunCacheKey(zkAddress, chainId)
+    const cached = await this.#storage.get(key, null as RailgunAccountCache | null)
+
+    this.lastFetchedRailgunAccountCache = {
+      zkAddress,
+      chainId,
+      cache: cached,
+      fetchedAt: Date.now()
+    }
+    this.emitUpdate()
+
+    return cached
+  }
+
+  async setRailgunAccountCache(
+    zkAddress: string,
+    chainId: number,
+    cache: RailgunAccountCache
+  ): Promise<void> {
+    const key = this.#getRailgunCacheKey(zkAddress, chainId)
+    await this.#storage.set(key, cache)
+
+    // also surface to popup so it can immediately use the latest version
+    this.lastFetchedRailgunAccountCache = {
+      zkAddress,
+      chainId,
+      cache,
+      fetchedAt: Date.now()
+    }
+    this.emitUpdate()
+  }
+
+  // ─────────────────────────────────────────────
+  // EXISTING SIGN-ACCOUNT-OP STUFF (kept)
+  // ─────────────────────────────────────────────
   async #initSignAccOp(calls: Call[]) {
     if (!this.#selectedAccount?.account || this.signAccountOpController || !this.#accounts) return
-    // Use the network from the first call to determine the chainId
-    const chainId = calls.length > 0 ? BigInt(11155111) : 11155111n // Default to Sepolia for now
-    const network = this.#networks.networks.find((net) => net.chainId === chainId)
 
+    // NOTE: for now we hardcode Sepolia exactly like before
+    const chainId = calls.length > 0 ? BigInt(11155111) : 11155111n
+    const network = this.#networks.networks.find((net) => net.chainId === chainId)
     if (!network) return
 
     const provider = this.#providers.providers[network.chainId.toString()]
@@ -241,14 +335,13 @@ export class RailgunController extends EventEmitter {
       this.#selectedAccount.account,
       network,
       provider,
-      randomId(), // the account op and the action are fabricated
+      randomId(),
       accountOp,
       () => true,
       false,
       undefined
     )
 
-    // propagate updates from signAccountOp here
     this.#signAccountOpSubscriptions.push(
       this.signAccountOpController.onUpdate(() => {
         this.emitUpdate()
@@ -266,7 +359,6 @@ export class RailgunController extends EventEmitter {
   }
 
   async reestimate() {
-    // Don't run the estimation loop if there is no SignAccountOpController or if the loop is already running.
     if (!this.signAccountOpController || this.#reestimateAbortController) return
 
     this.#reestimateAbortController = new AbortController()
@@ -292,49 +384,20 @@ export class RailgunController extends EventEmitter {
       }
     }
 
-    loop()
-  }
-
-  async getRailgunKeys(index: number): Promise<RailgunAccountKeys> {
-    if (!this.currentRailgunKeys) {
-      this.currentRailgunKeys = await this.#getRailgunKeysInternal(index)
-    }
-    return this.currentRailgunKeys
+    void loop()
   }
 
   async syncSignAccountOp(calls?: Call[]) {
     if (!this.#selectedAccount?.account) return
 
-    // Build the calls based on your privacy pools operations
     const transactionCalls: Call[] = calls || []
-
     if (!transactionCalls.length) return
 
     try {
-      // IMPORTANT: Enable tracking for the upcoming broadcast
-      // This flag is checked in main.ts handleSignAndBroadcastAccountOp() to determine
-      // whether to set latestBroadcastedAccountOp after successful broadcast
       this.shouldTrackLatestBroadcastedAccountOp = true
 
-      // If SignAccountOpController is already initialized, we just update it
       if (this.signAccountOpController) {
         this.signAccountOpController.update({ calls: transactionCalls })
-
-        // // Update withdrawal metadata if we have pending withdrawal
-        // if (this.#pendingWithdrawalParams) {
-        //   if (!this.signAccountOpController.accountOp.meta) {
-        //     this.signAccountOpController.accountOp.meta = {}
-        //   }
-        //   // @ts-ignore - Custom meta property for privacy pools withdrawal
-        //   this.signAccountOpController.accountOp.meta.withdrawalData = {
-        //     chainId: this.#pendingWithdrawalParams.chainId,
-        //     poolAddress: this.#pendingWithdrawalParams.poolAddress,
-        //     recipient: this.#pendingWithdrawalParams.recipient,
-        //     totalAmount: this.#pendingWithdrawalParams.totalAmount,
-        //     isPrivacyPoolsWithdrawal: true
-        //   }
-        // }
-
         return
       }
 
@@ -348,6 +411,9 @@ export class RailgunController extends EventEmitter {
     }
   }
 
+  // ─────────────────────────────────────────────
+  // FORM / UI-LEVEL HELPERS (kept)
+  // ─────────────────────────────────────────────
   update({ depositAmount, privacyProvider, chainId }: RailgunFormUpdate) {
     console.log('DEBUG: RAILGUN CONTROLLER UPDATE', { depositAmount, privacyProvider, chainId })
 
@@ -368,15 +434,10 @@ export class RailgunController extends EventEmitter {
 
   unloadScreen(forceUnload?: boolean) {
     if (this.hasPersistedState && !forceUnload) return
-
     this.destroyLatestBroadcastedAccountOp()
     this.resetForm()
   }
 
-  /**
-   * Resets all form state including initialization status.
-   * Use this for complete controller reset (e.g., when unloading screen).
-   */
   resetForm(shouldDestroyAccountOp = true) {
     this.selectedToken = null
     this.depositAmount = ''
@@ -402,7 +463,6 @@ export class RailgunController extends EventEmitter {
   }
 
   destroySignAccountOp() {
-    // Unsubscribe from all previous subscriptions
     this.#signAccountOpSubscriptions.forEach((unsubscribe) => unsubscribe())
     this.#signAccountOpSubscriptions = []
 
@@ -428,7 +488,6 @@ export class RailgunController extends EventEmitter {
   setSdkInitialized() {
     this.#isInitialized = true
     this.#initializationError = null
-
     this.emitUpdate()
   }
 
@@ -465,15 +524,25 @@ export class RailgunController extends EventEmitter {
     return this.addressState.ensAddress || this.addressState.fieldValue
   }
 
+  // ─────────────────────────────────────────────
+  // SERIALIZATION
+  // ─────────────────────────────────────────────
   toJSON() {
     return {
-      ...this,
       ...super.toJSON(),
       isInitialized: this.isInitialized,
       initialPromiseLoaded: this.initialPromiseLoaded,
       hasPersistedState: this.hasPersistedState,
       selectedToken: this.selectedToken,
-      recipientAddress: this.recipientAddress
+      recipientAddress: this.recipientAddress,
+      chainId: this.chainId,
+      depositAmount: this.depositAmount,
+      privacyProvider: this.privacyProvider,
+      infuraApiKey: this.infuraApiKey,
+      // 👇 expose all “gets” so popup can poll
+      defaultRailgunKeys: this.defaultRailgunKeys,
+      derivedRailgunKeysByIndex: this.derivedRailgunKeysByIndex,
+      lastFetchedRailgunAccountCache: this.lastFetchedRailgunAccountCache
     }
   }
 }

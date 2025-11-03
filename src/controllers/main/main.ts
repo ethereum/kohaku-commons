@@ -219,6 +219,7 @@ export class MainController extends EventEmitter {
     privacyPoolsRelayerUrl,
     railgunRelayerUrl,
     alchemyApiKey,
+    infuraApiKey,
     featureFlags,
     swapApiKey,
     keystoreSigners,
@@ -235,6 +236,7 @@ export class MainController extends EventEmitter {
     privacyPoolsRelayerUrl: string
     railgunRelayerUrl: string
     alchemyApiKey: string
+    infuraApiKey: string
     featureFlags: Partial<FeatureFlags>
     swapApiKey: string
     keystoreSigners: Partial<{ [key in Key['type']]: KeystoreSignerType }>
@@ -530,8 +532,10 @@ export class MainController extends EventEmitter {
       this.selectedAccount,
       this.portfolio,
       this.activity,
+      this.storage,
       this.#externalSignerControllers,
-      railgunRelayerUrl
+      railgunRelayerUrl,
+      infuraApiKey
     )
   }
 
