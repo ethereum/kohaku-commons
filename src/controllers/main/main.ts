@@ -214,6 +214,7 @@ export class MainController extends EventEmitter {
     privacyPoolsAspUrl,
     privacyPoolsRelayerUrl,
     alchemyApiKey,
+    hypersyncApiKey,
     featureFlags,
     swapApiKey,
     keystoreSigners,
@@ -229,6 +230,7 @@ export class MainController extends EventEmitter {
     privacyPoolsAspUrl: string
     privacyPoolsRelayerUrl: string
     alchemyApiKey: string
+    hypersyncApiKey: string
     featureFlags: Partial<FeatureFlags>
     swapApiKey: string
     keystoreSigners: Partial<{ [key in Key['type']]: KeystoreSignerType }>
@@ -513,6 +515,7 @@ export class MainController extends EventEmitter {
       privacyPoolsAspUrl,
       privacyPoolsRelayerUrl,
       alchemyApiKey,
+      hypersyncApiKey,
       this.fetch
     )
   }

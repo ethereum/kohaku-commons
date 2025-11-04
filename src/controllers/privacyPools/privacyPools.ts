@@ -141,6 +141,8 @@ export class PrivacyPoolsController extends EventEmitter {
 
   #alchemyApiKey: string
 
+  #hypersyncApiKey: string
+
   #signAccountOpSubscriptions: Function[] = []
 
   #reestimateAbortController: AbortController | null = null
@@ -148,8 +150,6 @@ export class PrivacyPoolsController extends EventEmitter {
   #quoteRefetchAbortController: AbortController | null = null
 
   #transactionPollingAbortController: AbortController | null = null
-
-  #pendingWithdrawalProof: TransformedProof[] | null = null
 
   #pendingWithdrawalParams: {
     chainId: number
@@ -251,6 +251,7 @@ export class PrivacyPoolsController extends EventEmitter {
     privacyPoolsAspUrl: string,
     privacyPoolsRelayerUrl: string,
     alchemyApiKey: string,
+    hypersyncApiKey: string,
     fetch: Fetch
   ) {
     super()
@@ -268,6 +269,7 @@ export class PrivacyPoolsController extends EventEmitter {
     this.#activity = activity
     this.#externalSignerControllers = externalSignerControllers
     this.#relayerUrl = relayerUrl
+    this.#hypersyncApiKey = hypersyncApiKey
     this.#privacyPoolsRelayerUrl = privacyPoolsRelayerUrl
     this.#fetch = fetch
 
@@ -307,7 +309,8 @@ export class PrivacyPoolsController extends EventEmitter {
         {
           ...chain,
           aspUrl: this.#privacyPoolsAspUrl,
-          rpcUrl: `${chain.rpcUrl}${this.#alchemyApiKey}`
+          rpcUrl: `${chain.rpcUrl}${this.#alchemyApiKey}`,
+          sdkRpcUrl: `${chain.sdkRpcUrl}${this.#hypersyncApiKey}`
         }
       ])
     )
@@ -736,7 +739,6 @@ export class PrivacyPoolsController extends EventEmitter {
     this.relayerQuote = null
     this.updateQuoteStatus = 'INITIAL'
     this.#updateQuoteId = undefined
-    this.#pendingWithdrawalProof = null
     this.#pendingWithdrawalParams = null
     this.hasProceeded = false
 
@@ -762,7 +764,6 @@ export class PrivacyPoolsController extends EventEmitter {
     }
 
     this.#stopQuoteRefetch()
-    this.#pendingWithdrawalProof = null
     this.#pendingWithdrawalParams = null
     this.hasProceeded = false
     this.emitUpdate()
