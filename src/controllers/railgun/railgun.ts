@@ -270,17 +270,17 @@ export class RailgunController extends EventEmitter {
     chainId: number,
     cache: RailgunAccountCache
   ): Promise<void> {
-    const key = this.#getRailgunCacheKey(zkAddress, chainId)
-    await this.#storage.set(key, cache)
-
-    // also surface to popup so it can immediately use the latest version
+    const key = this.#getRailgunCacheKey(zkAddress, chainId);
+    await this.#storage.set(key, cache);
+  
     this.lastFetchedRailgunAccountCache = {
       zkAddress,
       chainId,
-      cache,
+      cache: null, // NOTE IMPORTANT: avoid big payload!
       fetchedAt: Date.now()
-    }
-    this.emitUpdate()
+    };
+
+    this.emitUpdate();
   }
 
   // ─────────────────────────────────────────────
@@ -539,6 +539,7 @@ export class RailgunController extends EventEmitter {
       depositAmount: this.depositAmount,
       privacyProvider: this.privacyProvider,
       infuraApiKey: this.infuraApiKey,
+      
       // 👇 expose all “gets” so popup can poll
       defaultRailgunKeys: this.defaultRailgunKeys,
       derivedRailgunKeysByIndex: this.derivedRailgunKeysByIndex,
