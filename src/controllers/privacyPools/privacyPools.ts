@@ -67,6 +67,7 @@ interface PrivacyPoolsFormUpdate {
   shouldSetMaxAmount?: boolean
   isRecipientAddressUnknownAgreed?: boolean
   batchSize?: number
+  currentPrivateBalance?: string
 }
 
 type Hash = bigint
@@ -192,6 +193,8 @@ export class PrivacyPoolsController extends EventEmitter {
   depositAmount: string = ''
 
   withdrawalAmount: string = ''
+
+  currentPrivateBalance: string = ''
 
   maxAmount: string = ''
 
@@ -503,7 +506,20 @@ export class PrivacyPoolsController extends EventEmitter {
     const hasRecipientAddress = !!this.recipientAddress
     const isRecipientValid = this.validationFormMsgs.recipientAddress.success
 
-    return hasWithdrawalAmount && hasSelectedToken && hasRecipientAddress && isRecipientValid
+    const withdrawalAmountNum = parseFloat(this.withdrawalAmount)
+    const currentBalanceNum = parseFloat(this.currentPrivateBalance)
+    const isWithinBalance =
+      !Number.isNaN(withdrawalAmountNum) &&
+      !Number.isNaN(currentBalanceNum) &&
+      withdrawalAmountNum <= currentBalanceNum
+
+    return (
+      hasWithdrawalAmount &&
+      hasSelectedToken &&
+      hasRecipientAddress &&
+      isRecipientValid &&
+      isWithinBalance
+    )
   }
 
   update({
@@ -516,7 +532,8 @@ export class PrivacyPoolsController extends EventEmitter {
     maxAmount,
     shouldSetMaxAmount,
     isRecipientAddressUnknownAgreed,
-    batchSize
+    batchSize,
+    currentPrivateBalance
   }: PrivacyPoolsFormUpdate) {
     let shouldUpdateQuote = false
 
@@ -561,6 +578,11 @@ export class PrivacyPoolsController extends EventEmitter {
 
     if (typeof batchSize === 'number') {
       this.batchSize = batchSize
+      shouldUpdateQuote = true
+    }
+
+    if (typeof currentPrivateBalance === 'string') {
+      this.currentPrivateBalance = currentPrivateBalance
       shouldUpdateQuote = true
     }
 
