@@ -6,7 +6,8 @@ import {
   parseUnits,
   toBytes,
   type Address,
-  type Hex
+  type Hex,
+  zeroAddress
 } from 'viem'
 import { HDNodeWallet, Mnemonic } from 'ethers'
 import type { KeystoreController } from '../keystore/keystore'
@@ -66,6 +67,7 @@ interface PrivacyPoolsFormUpdate {
   shouldSetMaxAmount?: boolean
   isRecipientAddressUnknownAgreed?: boolean
   batchSize?: number
+  currentPrivateBalance?: string
 }
 
 type Hash = bigint
@@ -140,6 +142,8 @@ export class PrivacyPoolsController extends EventEmitter {
 
   #alchemyApiKey: string
 
+  #hypersyncApiKey: string
+
   #signAccountOpSubscriptions: Function[] = []
 
   #reestimateAbortController: AbortController | null = null
@@ -147,8 +151,6 @@ export class PrivacyPoolsController extends EventEmitter {
   #quoteRefetchAbortController: AbortController | null = null
 
   #transactionPollingAbortController: AbortController | null = null
-
-  #pendingWithdrawalProof: TransformedProof[] | null = null
 
   #pendingWithdrawalParams: {
     chainId: number
@@ -191,6 +193,8 @@ export class PrivacyPoolsController extends EventEmitter {
   depositAmount: string = ''
 
   withdrawalAmount: string = ''
+
+  currentPrivateBalance: string = ''
 
   maxAmount: string = ''
 
@@ -250,6 +254,7 @@ export class PrivacyPoolsController extends EventEmitter {
     privacyPoolsAspUrl: string,
     privacyPoolsRelayerUrl: string,
     alchemyApiKey: string,
+    hypersyncApiKey: string,
     fetch: Fetch
   ) {
     super()
@@ -267,6 +272,7 @@ export class PrivacyPoolsController extends EventEmitter {
     this.#activity = activity
     this.#externalSignerControllers = externalSignerControllers
     this.#relayerUrl = relayerUrl
+    this.#hypersyncApiKey = hypersyncApiKey
     this.#privacyPoolsRelayerUrl = privacyPoolsRelayerUrl
     this.#fetch = fetch
 
@@ -306,7 +312,8 @@ export class PrivacyPoolsController extends EventEmitter {
         {
           ...chain,
           aspUrl: this.#privacyPoolsAspUrl,
-          rpcUrl: `${chain.rpcUrl}${this.#alchemyApiKey}`
+          rpcUrl: `${chain.rpcUrl}${this.#alchemyApiKey}`,
+          sdkRpcUrl: `${chain.sdkRpcUrl}${this.#hypersyncApiKey}`
         }
       ])
     )
@@ -499,7 +506,20 @@ export class PrivacyPoolsController extends EventEmitter {
     const hasRecipientAddress = !!this.recipientAddress
     const isRecipientValid = this.validationFormMsgs.recipientAddress.success
 
-    return hasWithdrawalAmount && hasSelectedToken && hasRecipientAddress && isRecipientValid
+    const withdrawalAmountNum = parseFloat(this.withdrawalAmount)
+    const currentBalanceNum = parseFloat(this.currentPrivateBalance)
+    const isWithinBalance =
+      !Number.isNaN(withdrawalAmountNum) &&
+      !Number.isNaN(currentBalanceNum) &&
+      withdrawalAmountNum <= currentBalanceNum
+
+    return (
+      hasWithdrawalAmount &&
+      hasSelectedToken &&
+      hasRecipientAddress &&
+      isRecipientValid &&
+      isWithinBalance
+    )
   }
 
   update({
@@ -512,7 +532,8 @@ export class PrivacyPoolsController extends EventEmitter {
     maxAmount,
     shouldSetMaxAmount,
     isRecipientAddressUnknownAgreed,
-    batchSize
+    batchSize,
+    currentPrivateBalance
   }: PrivacyPoolsFormUpdate) {
     let shouldUpdateQuote = false
 
@@ -557,6 +578,11 @@ export class PrivacyPoolsController extends EventEmitter {
 
     if (typeof batchSize === 'number') {
       this.batchSize = batchSize
+      shouldUpdateQuote = true
+    }
+
+    if (typeof currentPrivateBalance === 'string') {
+      this.currentPrivateBalance = currentPrivateBalance
       shouldUpdateQuote = true
     }
 
@@ -735,7 +761,6 @@ export class PrivacyPoolsController extends EventEmitter {
     this.relayerQuote = null
     this.updateQuoteStatus = 'INITIAL'
     this.#updateQuoteId = undefined
-    this.#pendingWithdrawalProof = null
     this.#pendingWithdrawalParams = null
     this.hasProceeded = false
 
@@ -761,7 +786,6 @@ export class PrivacyPoolsController extends EventEmitter {
     }
 
     this.#stopQuoteRefetch()
-    this.#pendingWithdrawalProof = null
     this.#pendingWithdrawalParams = null
     this.hasProceeded = false
     this.emitUpdate()
@@ -932,6 +956,36 @@ export class PrivacyPoolsController extends EventEmitter {
 
     this.#startTransactionPolling(BigInt(params.chainId), response.data.txId)
 
+    this.emitUpdate()
+  }
+
+  async addImportedAccountToActivityController(accountName: string) {
+    if (!this.#selectedAccount?.account) {
+      throw new Error('No account selected')
+    }
+
+    // Construct a proper SubmittedAccountOp for the activity controller
+    const submittedAccountOp: SubmittedAccountOp = {
+      accountAddr: zeroAddress,
+      chainId: BigInt(11155111),
+      signingKeyAddr: null,
+      signingKeyType: null,
+      gasLimit: null,
+      gasFeePayment: null,
+      nonce: 0n, // Privacy pools don't use nonces
+      signature: '0x' as `0x${string}`,
+      accountOpToExecuteBefore: null,
+      calls: [],
+      status: AccountOpStatus.Success,
+      txnId: new Date().getTime().toString(),
+      identifiedBy: {
+        type: 'ImportedAccount',
+        identifier: accountName
+      },
+      timestamp: new Date().getTime()
+    }
+
+    await this.#activity.addAccountOp(submittedAccountOp)
     this.emitUpdate()
   }
 

@@ -1,6 +1,8 @@
 import { type Address, parseEther } from 'viem'
 import { type Chain, sepolia } from 'viem/chains'
 
+const ALCHEMY_API_KEY = process.env.REACT_APP_ALCHEMY_API_KEY
+
 // Add chains to the whitelist to be used in the app
 const testnetChains: readonly [Chain, ...Chain[]] = [sepolia]
 
@@ -54,7 +56,7 @@ const testnetChainData: ChainData = {
     image: '',
     explorerUrl: sepolia.blockExplorers.default.url,
     // sdkRpcUrl: `/api/hypersync-rpc?chainId=11155111`, // Secure Hypersync proxy (relative URL)
-    sdkRpcUrl: 'https://sepolia.rpc.hypersync.xyz',
+    sdkRpcUrl: 'https://sepolia.rpc.hypersync.xyz/',
     rpcUrl: 'https://eth-sepolia.g.alchemy.com/v2/',
     aspUrl: '',
     relayers: [
