@@ -632,8 +632,6 @@ export class PrivacyPoolsController extends EventEmitter {
         throw new Error('No pool information available')
       }
 
-      console.log('DEBUG: getting quote')
-
       // Fetch relayer details
       const detailsResponse = await this.#fetch(
         `${this.#privacyPoolsRelayerUrl}/relayer/details?chainId=${
