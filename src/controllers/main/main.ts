@@ -2,6 +2,7 @@
 import { ethErrors } from 'eth-rpc-errors'
 import { getAddress } from 'ethers'
 
+import { BrowserProvider } from '../../services/provider/BrowserProvider'
 import AmbireAccount7702 from '../../../contracts/compiled/AmbireAccount7702.json'
 import EmittableError from '../../classes/EmittableError'
 import ExternalSignerError from '../../classes/ExternalSignerError'
@@ -1743,7 +1744,11 @@ export class MainController extends EventEmitter {
       const senderAddr = BROADCAST_OPTIONS.byOtherEOA
         ? accountOp.gasFeePayment.paidBy
         : accountOp.accountAddr
-      const nonce = await provider.getTransactionCount(senderAddr).catch((e) => e)
+      // We need the latest nonce because Helios might be lagging behind the execution RPC
+      // @TODO maybe rework fallback logic
+      const nonceProvider =
+        provider instanceof BrowserProvider ? provider.getFallbackProvider() : provider
+      const nonce = await nonceProvider.getTransactionCount(senderAddr).catch((e) => e)
 
       // @precaution
       if (nonce instanceof Error) {
@@ -1775,13 +1780,17 @@ export class MainController extends EventEmitter {
           ? accountOp.calls.length
           : 1
         if (txnLength > 1) signAccountOp.update({ signedTransactionsCount: 0 })
+        // We need the latest nonce because Helios might be lagging behind the execution RPC
+        // @TODO maybe rework fallback logic
+        const broadcastProvider =
+          provider instanceof BrowserProvider ? provider.getFallbackProvider() : provider
         for (let i = 0; i < txnLength; i++) {
           const currentNonce = nonce + i
           const rawTxn = await buildRawTransaction(
             account,
             accountOp,
             accountState,
-            provider,
+            broadcastProvider,
             network,
             currentNonce,
             accountOp.gasFeePayment.broadcastOption,
@@ -1796,10 +1805,10 @@ export class MainController extends EventEmitter {
           }
           if (accountOp.gasFeePayment.broadcastOption === BROADCAST_OPTIONS.delegation) {
             multipleTxnsBroadcastRes.push({
-              hash: await provider.send('eth_sendRawTransaction', [signedTxn])
+              hash: await broadcastProvider.send('eth_sendRawTransaction', [signedTxn])
             })
           } else {
-            multipleTxnsBroadcastRes.push(await provider.broadcastTransaction(signedTxn))
+            multipleTxnsBroadcastRes.push(await broadcastProvider.broadcastTransaction(signedTxn))
           }
           if (txnLength > 1) signAccountOp.update({ signedTransactionsCount: i + 1 })
 
@@ -1917,6 +1926,7 @@ export class MainController extends EventEmitter {
     }
     // Smart account, the Relayer way
     else {
+      console.log('broadcasting with relayer, gasLimit', accountOp.gasFeePayment!.simulatedGasLimit)
       try {
         const body = {
           gasLimit: Number(accountOp.gasFeePayment!.simulatedGasLimit),

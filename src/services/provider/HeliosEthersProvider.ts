@@ -93,7 +93,7 @@ export class HeliosEthersProvider implements Eip1193Provider {
     return Date.now() - this.lastFallbackTime < this.FALLBACK_COOLDOWN_MS
   }
 
-  private getFallbackProvider(): JsonRpcProvider {
+  getFallbackProvider(): JsonRpcProvider {
     if (!this.fallbackProvider) {
       this.fallbackProvider = new JsonRpcProvider(this.rpcUrl, this.staticNetwork, {
         staticNetwork: this.staticNetwork,

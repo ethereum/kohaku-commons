@@ -1,5 +1,6 @@
 import { Interface, toBeHex, toQuantity, ZeroAddress } from 'ethers'
 
+import { BrowserProvider } from '../../services/provider/BrowserProvider'
 import AmbireAccount from '../../../contracts/compiled/AmbireAccount.json'
 import { DEPLOYLESS_SIMULATION_FROM } from '../../consts/deploy'
 import { Account, AccountOnchainState } from '../../interfaces/account'
@@ -79,7 +80,13 @@ export async function providerEstimateGas(
       ? [txnParams, blockTag, stateOverride]
       : [txnParams, blockTag]
 
-  const gasUsed = await provider
+  // We need the latest gas estimation because Helios might be lagging behind the execution RPC
+  // and cause transaction to revert after submission
+  // @TODO maybe rework fallback logic
+  const estimationProvider =
+    provider instanceof BrowserProvider ? provider.getFallbackProvider() : provider
+
+  const gasUsed = await estimationProvider
     .send('eth_estimateGas', params)
     .catch(getHumanReadableEstimationError)
   if (gasUsed instanceof Error) return gasUsed
