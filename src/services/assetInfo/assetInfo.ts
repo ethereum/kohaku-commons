@@ -1,3 +1,4 @@
+import { RPCProvider } from 'interfaces/provider'
 import { Network } from '../../interfaces/network'
 import { GetOptions, Portfolio, TokenResult } from '../../libs/portfolio'
 import { getRpcProvider } from '../provider'
@@ -12,8 +13,11 @@ const scheduledActions: {
     | undefined
 } = {}
 
-export async function executeBatchedFetch(network: Network): Promise<void> {
-  const provider = getRpcProvider(network)
+export async function executeBatchedFetch(
+  network: Network,
+  providerOverride?: RPCProvider
+): Promise<void> {
+  const provider = providerOverride ?? getRpcProvider(network)
   const allAddresses =
     Array.from(new Set(scheduledActions[network.chainId.toString()]?.data.map((i) => i.address))) ||
     []
@@ -55,13 +59,14 @@ export async function executeBatchedFetch(network: Network): Promise<void> {
 export async function resolveAssetInfo(
   address: string,
   network: Network,
-  callback: (arg: { tokenInfo?: TokenResult; nftInfo?: { name: string } }) => void
+  callback: (arg: { tokenInfo?: TokenResult; nftInfo?: { name: string } }) => void,
+  providerOverride?: RPCProvider
 ): Promise<void> {
   if (!scheduledActions[network.chainId.toString()]?.data?.length) {
     scheduledActions[network.chainId.toString()] = {
       promise: new Promise((resolve, reject) => {
         setTimeout(async () => {
-          await executeBatchedFetch(network).catch(reject)
+          await executeBatchedFetch(network, providerOverride).catch(reject)
           scheduledActions[network.chainId.toString()] = undefined
           resolve(0)
         }, 500)
