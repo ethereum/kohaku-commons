@@ -33,7 +33,7 @@ const testnetNetworks: Network[] = [
     feeOptions: { is1559: true },
     predefined: true,
     useHelios: true,
-    heliosCheckpoint: '0xbd775fd308d103fb45e85969ebcc34b3fa506866d7050038cd855311bb61a404'
+    heliosCheckpoint: '0x2e0761d0516686a1d4dce04a6f4c51da6b01156be0446dacccca1dfacb360b9b'
   }
   // {
   //   name: 'Base Sepolia',
