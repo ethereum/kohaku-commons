@@ -361,6 +361,15 @@ export class RailgunController extends EventEmitter {
       })
     )
 
+    // Trigger immediate initial estimate
+    // The SignAccountOpController's #load() should start estimation automatically,
+    // but we ensure it happens immediately
+    if (this.signAccountOpController) {
+      // eslint-disable-next-line @typescript-eslint/no-floating-promises
+      this.signAccountOpController.estimate()
+    }
+
+    // Start the re-estimation loop for periodic updates
     this.reestimate()
   }
 
@@ -371,9 +380,11 @@ export class RailgunController extends EventEmitter {
     const signal = this.#reestimateAbortController!.signal
 
     const loop = async () => {
+      // First, wait 30 seconds before starting the loop
+      // eslint-disable-next-line no-await-in-loop
+      await wait(30000)
+      
       while (!signal.aborted) {
-        // eslint-disable-next-line no-await-in-loop
-        await wait(30000)
         if (signal.aborted) break
 
         if (this.signAccountOpController?.estimation.status !== EstimationStatus.Loading) {
@@ -387,6 +398,11 @@ export class RailgunController extends EventEmitter {
             this.signAccountOpController.estimation.errors
           )
         }
+
+        // Wait 30 seconds before next re-estimation
+        // eslint-disable-next-line no-await-in-loop
+        await wait(30000)
+        if (signal.aborted) break
       }
     }
 
@@ -402,10 +418,18 @@ export class RailgunController extends EventEmitter {
     try {
       this.shouldTrackLatestBroadcastedAccountOp = true
 
+      // If a controller already exists, destroy it first to ensure clean state
+      // This prevents issues when starting a new transaction after a previous one
+      // The old controller might be in a stale state (e.g., still signing, estimating, etc.)
       if (this.signAccountOpController) {
-        this.signAccountOpController.update({ calls: transactionCalls })
-        return
+        // Destroy the old controller to start fresh
+        // This will also reset hasProceeded and clean up subscriptions/re-estimation loops
+        this.destroySignAccountOp()
       }
+
+      // Ensure hasProceeded is false when starting a new transaction
+      // (destroySignAccountOp should already do this, but be explicit)
+      this.hasProceeded = false
 
       await this.#initSignAccOp(transactionCalls)
     } catch (error) {
