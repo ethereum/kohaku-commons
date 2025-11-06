@@ -1,6 +1,8 @@
 import { type Address, parseEther } from 'viem'
 import { type Chain, sepolia } from 'viem/chains'
 
+const ALCHEMY_API_KEY = process.env.REACT_APP_ALCHEMY_API_KEY
+
 // Add chains to the whitelist to be used in the app
 const testnetChains: readonly [Chain, ...Chain[]] = [sepolia]
 
@@ -16,6 +18,11 @@ export interface PoolInfo {
   entryPointAddress: Address
   assetAddress: Address
   maxDeposit: bigint
+  // Same as production 0.001
+  minDeposit: bigint
+  // Get minWithdrawal amount from relayer endpoint
+  // https://relayer-staging-149184580131.us-east1.run.app/relayer/details?chainId=11155111&assetAddress=0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE
+  minWithdrawal: bigint
   asset: ChainAssets
   assetDecimals?: number
   icon?: string
@@ -49,7 +56,7 @@ const testnetChainData: ChainData = {
     image: '',
     explorerUrl: sepolia.blockExplorers.default.url,
     // sdkRpcUrl: `/api/hypersync-rpc?chainId=11155111`, // Secure Hypersync proxy (relative URL)
-    sdkRpcUrl: 'https://sepolia.rpc.hypersync.xyz',
+    sdkRpcUrl: 'https://sepolia.rpc.hypersync.xyz/',
     rpcUrl: 'https://eth-sepolia.g.alchemy.com/v2/',
     aspUrl: '',
     relayers: [
@@ -65,6 +72,8 @@ const testnetChainData: ChainData = {
         deploymentBlock: 8587019n,
         entryPointAddress: '0x34A2068192b1297f2a7f85D7D8CdE66F8F0921cB',
         maxDeposit: parseEther('1'),
+        minDeposit: parseEther('0.001'),
+        minWithdrawal: parseEther('0.001'),
         asset: 'ETH',
         assetDecimals: 18,
         icon: '',

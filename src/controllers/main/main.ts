@@ -220,6 +220,7 @@ export class MainController extends EventEmitter {
     railgunRelayerUrl,
     alchemyApiKey,
     infuraApiKey,
+    hypersyncApiKey,
     featureFlags,
     swapApiKey,
     keystoreSigners,
@@ -237,6 +238,7 @@ export class MainController extends EventEmitter {
     railgunRelayerUrl: string
     alchemyApiKey: string
     infuraApiKey: string
+    hypersyncApiKey: string
     featureFlags: Partial<FeatureFlags>
     swapApiKey: string
     keystoreSigners: Partial<{ [key in Key['type']]: KeystoreSignerType }>
@@ -521,6 +523,7 @@ export class MainController extends EventEmitter {
       privacyPoolsAspUrl,
       privacyPoolsRelayerUrl,
       alchemyApiKey,
+      hypersyncApiKey,
       this.fetch
     )
 
@@ -800,7 +803,7 @@ export class MainController extends EventEmitter {
       if (!wasAlreadySigned) {
         if (!signAccountOp) {
           const message =
-            'The signing process was not initialized as expected. Please try again later or contact Ambire support if the issue persists.'
+            'The signing process was not initialized as expected. Please try again later or contact Kohaku support if the issue persists.'
 
           throw new EmittableError({ level: 'major', message })
         }
@@ -1050,7 +1053,7 @@ export class MainController extends EventEmitter {
       !accountAddr || !chainId || !this.accounts.accountStates?.[accountAddr]?.[chainId.toString()]
     if (isAccountStateStillMissing) {
       const message =
-        'Unable to sign the message. During the preparation step, required account data failed to get received. Please try again later or contact Ambire support.'
+        'Unable to sign the message. During the preparation step, required account data failed to get received. Please try again later or contact Kohaku support.'
       const error = new Error(
         `The account state of ${accountAddr} is missing for the network with id ${chainId}.`
       )
@@ -1083,7 +1086,7 @@ export class MainController extends EventEmitter {
       const ledgerCtrl = this.#externalSignerControllers.ledger
       if (!ledgerCtrl) {
         const message =
-          'Could not initialize connection with your Ledger device. Please try again later or contact Ambire support.'
+          'Could not initialize connection with your Ledger device. Please try again later or contact Kohaku support.'
         throw new EmittableError({ message, level: 'major', error: new Error(message) })
       }
 
@@ -1133,7 +1136,7 @@ export class MainController extends EventEmitter {
 
       if (!trezorCtrl) {
         const message =
-          'Could not initialize connection with your Trezor device. Please try again later or contact Ambire support.'
+          'Could not initialize connection with your Trezor device. Please try again later or contact Kohaku support.'
         throw new EmittableError({ message, level: 'major', error: new Error(message) })
       }
 
@@ -1166,7 +1169,7 @@ export class MainController extends EventEmitter {
       const latticeCtrl = this.#externalSignerControllers.lattice
       if (!latticeCtrl) {
         const message =
-          'Could not initialize connection with your Lattice1 device. Please try again later or contact Ambire support.'
+          'Could not initialize connection with your Lattice1 device. Please try again later or contact Kohaku support.'
         throw new EmittableError({ message, level: 'major', error: new Error(message) })
       }
 
@@ -2151,7 +2154,7 @@ export class MainController extends EventEmitter {
         }
       } else if (originalMessage.includes('Failed to fetch') && isRelayer) {
         message =
-          'Currently, the Ambire relayer seems to be down. Please try again a few moments later or broadcast with an EOA account'
+          'Currently, the Kohaku relayer seems to be down. Please try again a few moments later or broadcast with an EOA account'
       } else if (originalMessage.includes('user nonce') && isRelayer) {
         if (this.signAccountOp) {
           this.accounts

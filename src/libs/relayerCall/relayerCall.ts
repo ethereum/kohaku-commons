@@ -17,7 +17,7 @@ export class RelayerError extends Error {
   }
 }
 export const RELAYER_DOWN_MESSAGE =
-  'Currently, the Ambire relayer seems to be temporarily down. Please try again a few moments later'
+  'Currently, the Kohaku relayer seems to be temporarily down. Please try again a few moments later'
 
 export async function relayerCallUncaught(
   url: string,

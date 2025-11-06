@@ -6,13 +6,14 @@ import {
   parseUnits,
   toBytes,
   type Address,
-  type Hex
+  type Hex,
+  zeroAddress
 } from 'viem'
 import { HDNodeWallet, Mnemonic } from 'ethers'
 import type { KeystoreController } from '../keystore/keystore'
 import { type ChainData, chainData, whitelistedChains } from './config'
 import EventEmitter from '../eventEmitter/eventEmitter'
-import { SignAccountOpController, SigningStatus } from '../signAccountOp/signAccountOp'
+import { SignAccountOpController } from '../signAccountOp/signAccountOp'
 import { getBaseAccount } from '../../libs/account/getBaseAccount'
 import { AccountOp } from '../../libs/accountOp/accountOp'
 import { AccountOpStatus, Call } from '../../libs/accountOp/types'
@@ -22,6 +23,9 @@ import { randomId } from '../../libs/humanizer/utils'
 import { EstimationStatus } from '../estimation/types'
 import { AccountsController } from '../accounts/accounts'
 import { ActivityController } from '../activity/activity'
+import { isValidAddress } from '../../services/address'
+import { validateSendTransferAddress } from '../../services/validations'
+import { validatePrivacyPoolsDepositAmount } from '../../services/privacyPools/validations'
 import { NetworksController } from '../networks/networks'
 import { PortfolioController } from '../portfolio/portfolio'
 import { ProvidersController } from '../providers/providers'
@@ -41,6 +45,17 @@ import { SubmittedAccountOp } from '../../libs/accountOp/submittedAccountOp'
 
 const HARD_CODED_CURRENCY = 'usd'
 
+const DEFAULT_VALIDATION_FORM_MSGS = {
+  amount: {
+    success: false,
+    message: ''
+  },
+  recipientAddress: {
+    success: false,
+    message: ''
+  }
+}
+
 interface PrivacyPoolsFormUpdate {
   depositAmount?: string
   withdrawalAmount?: string
@@ -53,6 +68,7 @@ interface PrivacyPoolsFormUpdate {
   shouldSetMaxAmount?: boolean
   isRecipientAddressUnknownAgreed?: boolean
   batchSize?: number
+  currentPrivateBalance?: string
 }
 
 type Hash = bigint
@@ -62,6 +78,8 @@ type PoolInfo = {
   address: Hex
   scope: Hash
   deploymentBlock: bigint
+  maxDeposit: bigint
+  minDeposit: bigint
 }
 
 export type BatchWithdrawalProof = {
@@ -125,6 +143,8 @@ export class PrivacyPoolsController extends EventEmitter {
 
   #alchemyApiKey: string
 
+  #hypersyncApiKey: string
+
   #signAccountOpSubscriptions: Function[] = []
 
   #reestimateAbortController: AbortController | null = null
@@ -132,8 +152,6 @@ export class PrivacyPoolsController extends EventEmitter {
   #quoteRefetchAbortController: AbortController | null = null
 
   #transactionPollingAbortController: AbortController | null = null
-
-  #pendingWithdrawalProof: TransformedProof[] | null = null
 
   #pendingWithdrawalParams: {
     chainId: number
@@ -177,6 +195,8 @@ export class PrivacyPoolsController extends EventEmitter {
 
   withdrawalAmount: string = ''
 
+  currentPrivateBalance: string = ''
+
   maxAmount: string = ''
 
   secret: string | null = null
@@ -198,6 +218,7 @@ export class PrivacyPoolsController extends EventEmitter {
     feeRecipient: string
     totalAmountWithFee: string
     data: string
+    estimatedFee: string
   } | null = null
 
   // Transfer/Withdrawal-specific properties
@@ -214,14 +235,6 @@ export class PrivacyPoolsController extends EventEmitter {
   programmaticUpdateCounter: number = 0
 
   batchSize: number = 1
-
-  validationFormMsgs: {
-    amount: { success: boolean; message: string }
-    recipientAddress: { success: boolean; message: string }
-  } = {
-    amount: { success: true, message: '' },
-    recipientAddress: { success: true, message: '' }
-  }
 
   poolsByChain: PoolInfo[] = []
 
@@ -244,6 +257,7 @@ export class PrivacyPoolsController extends EventEmitter {
     privacyPoolsAspUrl: string,
     privacyPoolsRelayerUrl: string,
     alchemyApiKey: string,
+    hypersyncApiKey: string,
     fetch: Fetch
   ) {
     super()
@@ -261,6 +275,7 @@ export class PrivacyPoolsController extends EventEmitter {
     this.#activity = activity
     this.#externalSignerControllers = externalSignerControllers
     this.#relayerUrl = relayerUrl
+    this.#hypersyncApiKey = hypersyncApiKey
     this.#privacyPoolsRelayerUrl = privacyPoolsRelayerUrl
     this.#fetch = fetch
 
@@ -288,7 +303,9 @@ export class PrivacyPoolsController extends EventEmitter {
         chainId: pool.chainId,
         address: pool.address,
         scope: pool.scope as Hash,
-        deploymentBlock: pool.deploymentBlock
+        deploymentBlock: pool.deploymentBlock,
+        maxDeposit: pool.maxDeposit,
+        minDeposit: pool.minDeposit
       }
     })
 
@@ -298,142 +315,13 @@ export class PrivacyPoolsController extends EventEmitter {
         {
           ...chain,
           aspUrl: this.#privacyPoolsAspUrl,
-          rpcUrl: `${chain.rpcUrl}${this.#alchemyApiKey}`
+          rpcUrl: `${chain.rpcUrl}${this.#alchemyApiKey}`,
+          sdkRpcUrl: `${chain.sdkRpcUrl}${this.#hypersyncApiKey}`
         }
       ])
     )
 
     this.#initialPromiseLoaded = true
-
-    // TODO: REMOVE THIS - Mock transactions for testing
-    // Uncomment the line below to add mock Privacy Pools transactions for testing
-    // await this.#addMockTransactions()
-  }
-
-  /**
-   * TESTING ONLY: Adds mock Privacy Pools transactions to the activity list
-   * This method creates 3 mock transactions with different statuses to test
-   * the activity list integration. Remove or comment out after testing.
-   */
-  async #addMockTransactions() {
-    if (!this.#selectedAccount?.account) return
-
-    console.log('🧪 Adding mock Privacy Pools transactions for testing...')
-
-    const accountAddr = this.#selectedAccount.account.addr
-    const chainId = 11155111n // Sepolia
-
-    // Mock transaction 1: Pending (Broadcasted but not confirmed)
-    // Send 0.1 ETH to a recipient address
-    const mockTx1: SubmittedAccountOp = {
-      accountAddr,
-      chainId,
-      signingKeyAddr: null,
-      signingKeyType: null,
-      gasLimit: null,
-      gasFeePayment: null,
-      nonce: 0n,
-      signature:
-        '0x1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef' as `0x${string}`,
-      accountOpToExecuteBefore: null,
-      calls: [
-        {
-          to: '0x9876543210abcdef9876543210abcdef98765432' as `0x${string}`,
-          value: parseUnits('0.1', 18), // 0.1 ETH
-          data: '0x' as `0x${string}`,
-          fromUserRequestId: randomId()
-        }
-      ],
-      status: AccountOpStatus.BroadcastedButNotConfirmed,
-      txnId: '0xabc123def456abc123def456abc123def456abc123def456abc123def456abc1',
-      identifiedBy: {
-        type: 'PrivacyPoolsRelayer',
-        identifier: 'mock-relayer-id-001'
-      },
-      timestamp: Date.now() - 2 * 60 * 1000, // 2 minutes ago
-      meta: {
-        isPrivacyPoolsWithdrawal: true,
-        relayerId: 'mock-relayer-id-001'
-      }
-    }
-
-    // Mock transaction 2: Success
-    // Send 0.25 ETH to a recipient address
-    const mockTx2: SubmittedAccountOp = {
-      accountAddr,
-      chainId,
-      signingKeyAddr: null,
-      signingKeyType: null,
-      gasLimit: null,
-      gasFeePayment: null,
-      nonce: 0n,
-      signature:
-        '0xfedcba0987654321fedcba0987654321fedcba0987654321fedcba0987654321' as `0x${string}`,
-      accountOpToExecuteBefore: null,
-      calls: [
-        {
-          to: '0x1234567890abcdef1234567890abcdef12345678' as `0x${string}`,
-          value: parseUnits('0.25', 18), // 0.25 ETH
-          data: '0x' as `0x${string}`,
-          fromUserRequestId: randomId()
-        }
-      ],
-      status: AccountOpStatus.Success,
-      txnId: '0xdef789ghi012def789ghi012def789ghi012def789ghi012def789ghi012def7',
-      identifiedBy: {
-        type: 'PrivacyPoolsRelayer',
-        identifier: 'mock-relayer-id-002'
-      },
-      timestamp: Date.now() - 10 * 60 * 1000, // 10 minutes ago
-      meta: {
-        isPrivacyPoolsWithdrawal: true,
-        relayerId: 'mock-relayer-id-002'
-      }
-    }
-
-    // Mock transaction 3: Failure
-    // Send 0.5 ETH to a recipient address
-    const mockTx3: SubmittedAccountOp = {
-      accountAddr,
-      chainId,
-      signingKeyAddr: null,
-      signingKeyType: null,
-      gasLimit: null,
-      gasFeePayment: null,
-      nonce: 0n,
-      signature:
-        '0x111222333444555666777888999aaabbbcccdddeeefff000111222333444555' as `0x${string}`,
-      accountOpToExecuteBefore: null,
-      calls: [
-        {
-          to: '0xabcdefabcdefabcdefabcdefabcdefabcdefabcd' as `0x${string}`,
-          value: parseUnits('0.5', 18), // 0.5 ETH
-          data: '0x' as `0x${string}`,
-          fromUserRequestId: randomId()
-        }
-      ],
-      status: AccountOpStatus.Failure,
-      txnId: '0x999888777666555444333222111000fffeeeddcccbbbaaa999888777666555',
-      identifiedBy: {
-        type: 'PrivacyPoolsRelayer',
-        identifier: 'mock-relayer-id-003'
-      },
-      timestamp: Date.now() - 30 * 60 * 1000, // 30 minutes ago
-      meta: {
-        isPrivacyPoolsWithdrawal: true,
-        relayerId: 'mock-relayer-id-003'
-      }
-    }
-
-    // Add all mock transactions to the activity controller
-    await this.#activity.addAccountOp(mockTx1)
-    await this.#activity.addAccountOp(mockTx2)
-    await this.#activity.addAccountOp(mockTx3)
-
-    console.log('✅ Mock Privacy Pools transactions added successfully!')
-    console.log('   - Transaction 1: Pending (2 minutes ago)')
-    console.log('   - Transaction 2: Success (10 minutes ago)')
-    console.log('   - Transaction 3: Failure (30 minutes ago)')
   }
 
   async #generateAppSecretInternal(appInfo: string): Promise<string> {
@@ -564,7 +452,6 @@ export class PrivacyPoolsController extends EventEmitter {
       undefined
     )
 
-    // propagate updates from signAccountOp here
     this.#signAccountOpSubscriptions.push(
       this.signAccountOpController.onUpdate(() => {
         this.emitUpdate()
@@ -619,13 +506,24 @@ export class PrivacyPoolsController extends EventEmitter {
   }
 
   #getIsFormValidToFetchQuote() {
+    const hasWithdrawalAmount = !!this.withdrawalAmount && parseFloat(this.withdrawalAmount) > 0
+    const hasSelectedToken = !!this.selectedToken
+    const hasRecipientAddress = !!this.recipientAddress
+    const isRecipientValid = this.validationFormMsgs.recipientAddress.success
+
+    const withdrawalAmountNum = parseFloat(this.withdrawalAmount)
+    const currentBalanceNum = parseFloat(this.currentPrivateBalance)
+    const isWithinBalance =
+      !Number.isNaN(withdrawalAmountNum) &&
+      !Number.isNaN(currentBalanceNum) &&
+      withdrawalAmountNum <= currentBalanceNum
+
     return (
-      !!this.withdrawalAmount &&
-      parseFloat(this.withdrawalAmount) > 0 &&
-      !!this.selectedToken &&
-      !!this.recipientAddress &&
-      this.validationFormMsgs.amount.success &&
-      this.validationFormMsgs.recipientAddress.success
+      hasWithdrawalAmount &&
+      hasSelectedToken &&
+      hasRecipientAddress &&
+      isRecipientValid &&
+      isWithinBalance
     )
   }
 
@@ -640,7 +538,8 @@ export class PrivacyPoolsController extends EventEmitter {
     maxAmount,
     shouldSetMaxAmount,
     isRecipientAddressUnknownAgreed,
-    batchSize
+    batchSize,
+    currentPrivateBalance
   }: PrivacyPoolsFormUpdate) {
     console.log('DEBUG: PRIVACY POOLS FORM UPDATE CONTROLLER UPDATE');
     let shouldUpdateQuote = false
@@ -693,6 +592,11 @@ export class PrivacyPoolsController extends EventEmitter {
       shouldUpdateQuote = true
     }
 
+    if (typeof currentPrivateBalance === 'string') {
+      this.currentPrivateBalance = currentPrivateBalance
+      shouldUpdateQuote = true
+    }
+
     if (shouldSetMaxAmount && this.maxAmount) {
       this.withdrawalAmount = this.maxAmount
       this.#calculateAmountInFiat(this.maxAmount)
@@ -704,7 +608,6 @@ export class PrivacyPoolsController extends EventEmitter {
 
     this.emitUpdate()
 
-    // Trigger debounced quote fetch when relevant fields change
     if (shouldUpdateQuote) {
       // eslint-disable-next-line @typescript-eslint/no-floating-promises
       this.updateQuote({ debounce: true })
@@ -731,13 +634,10 @@ export class PrivacyPoolsController extends EventEmitter {
     this.updateQuoteStatus = 'LOADING'
     this.emitUpdate()
 
-    // Debounce to avoid excessive calls
     if (debounce) await wait(500)
-    if (this.#updateQuoteId !== quoteId) return // Guard check
+    if (this.#updateQuoteId !== quoteId) return
 
     try {
-      // Get the selected pool info - we need chainId and other details
-      // For now, we'll use a placeholder. You'll need to pass or determine the correct pool info
       const selectedPoolInfo = this.pools[0] // TODO: Determine the correct pool based on selected token/chain
       if (!selectedPoolInfo) {
         throw new Error('No pool information available')
@@ -783,9 +683,8 @@ export class PrivacyPoolsController extends EventEmitter {
 
       const quote = await quoteResponse.json()
 
-      if (this.#updateQuoteId !== quoteId) return // Guard check after async
+      if (this.#updateQuoteId !== quoteId) return
 
-      // Store the quote
       this.relayerQuote = {
         relayFeeBPS: quote.relayFeeBPS,
         feeRecipient: getAddress(relayerDetails.feeReceiverAddress),
@@ -794,15 +693,13 @@ export class PrivacyPoolsController extends EventEmitter {
           parseFloat(this.withdrawalAmount) *
           (1 + quote.relayFeeBPS / 10000)
         ).toString(),
-        data: quote.batchFeeCommitment.batchRelayData
+        data: quote.batchFeeCommitment.batchRelayData,
+        estimatedFee: quote.estimatedFee
       }
 
-      console.log('DEBUG: relayerQuote', this.relayerQuote)
-
-      // Start periodic refetch to keep quote fresh (quotes are valid for ~20 seconds)
       this.#startQuoteRefetch()
     } catch (error) {
-      if (this.#updateQuoteId !== quoteId) return // Guard check
+      if (this.#updateQuoteId !== quoteId) return
 
       this.emitError({
         level: 'minor',
@@ -875,16 +772,12 @@ export class PrivacyPoolsController extends EventEmitter {
     this.isRecipientAddressUnknownAgreed = false
     this.latestBroadcastedToken = null
     this.programmaticUpdateCounter = 0
-    this.validationFormMsgs = {
-      amount: { success: true, message: '' },
-      recipientAddress: { success: true, message: '' }
-    }
     this.#isInitialized = false
     this.relayerQuote = null
     this.updateQuoteStatus = 'INITIAL'
     this.#updateQuoteId = undefined
-    this.#pendingWithdrawalProof = null
     this.#pendingWithdrawalParams = null
+    this.hasProceeded = false
 
     if (shouldDestroyAccountOp) {
       this.destroySignAccountOp()
@@ -894,7 +787,6 @@ export class PrivacyPoolsController extends EventEmitter {
   }
 
   destroySignAccountOp() {
-    // Unsubscribe from all previous subscriptions
     this.#signAccountOpSubscriptions.forEach((unsubscribe) => unsubscribe())
     this.#signAccountOpSubscriptions = []
 
@@ -909,9 +801,9 @@ export class PrivacyPoolsController extends EventEmitter {
     }
 
     this.#stopQuoteRefetch()
-    this.#pendingWithdrawalProof = null
     this.#pendingWithdrawalParams = null
     this.hasProceeded = false
+    this.emitUpdate()
   }
 
   destroyLatestBroadcastedAccountOp() {
@@ -965,66 +857,16 @@ export class PrivacyPoolsController extends EventEmitter {
     }
   }
 
-  async prepareWithdrawal(params: BatchWithdrawalParams) {
+  async directBroadcastWithdrawal(params: BatchWithdrawalParams) {
     if (!this.#selectedAccount?.account) {
       throw new Error('No account selected')
-    }
-
-    if (!this.relayerQuote) {
-      throw new Error('No relayer quote available')
-    }
-
-    // Store the withdrawal proof and params
-    this.#pendingWithdrawalProof = params.proofs
-    this.#pendingWithdrawalParams = {
-      chainId: params.chainId,
-      poolAddress: params.poolAddress,
-      processooor: params.withdrawal.processooor,
-      recipient: this.recipientAddress || '',
-      batchSize: params.proofs.length,
-      totalAmount: this.withdrawalAmount,
-      data: params.withdrawal.data
-    }
-
-    // Create a call that represents the withdrawal for display purposes
-    // IMPORTANT: For Privacy Pools withdrawals via relayer, this Call is NEVER broadcast
-    // The actual withdrawal is submitted to the relayer API in broadcastWithdrawal()
-    // We create a Call to the BatchRelayer (processooor) with the actual withdrawal amount
-    // so the humanizer displays it correctly as "Send X ETH to BatchRelayer"
-    const withdrawalCall: Call = {
-      to: params.withdrawal.processooor as `0x${string}`, // BatchRelayer contract address
-      value: parseUnits(this.withdrawalAmount, 18), // Actual withdrawal amount in wei
-      data: '0x' as `0x${string}`, // Simple ETH transfer
-      fromUserRequestId: randomId()
-    }
-
-    // Initialize SignAccountOpController with the withdrawal call
-    // This shows the confirmation modal with transaction details
-    // When user confirms, broadcastWithdrawal() will be called instead of broadcasting this Call
-    await this.syncSignAccountOp([withdrawalCall])
-
-    this.emitUpdate()
-  }
-
-  async broadcastWithdrawal() {
-    if (!this.#pendingWithdrawalProof || !this.#pendingWithdrawalParams) {
-      throw new Error('No pending withdrawal to broadcast')
-    }
-
-    if (!this.#selectedAccount?.account) {
-      throw new Error('No account selected')
-    }
-
-    // Update SignAccountOpController status to show loading screen
-    if (this.signAccountOpController) {
-      this.signAccountOpController.updateStatus(SigningStatus.InProgress)
     }
 
     // IMMEDIATELY set latestBroadcastedAccountOp to show loading screen
     // This allows the UI to transition to the track screen right away
     this.latestBroadcastedAccountOp = {
       accountAddr: this.#selectedAccount.account.addr,
-      chainId: BigInt(this.#pendingWithdrawalParams.chainId),
+      chainId: BigInt(params.chainId),
       signingKeyAddr: null,
       signingKeyType: null,
       gasLimit: null,
@@ -1032,7 +874,7 @@ export class PrivacyPoolsController extends EventEmitter {
       nonce: 0n,
       signature: '0x' as `0x${string}`, // Temporary placeholder, will be updated with actual txId
       accountOpToExecuteBefore: null,
-      calls: this.signAccountOpController?.accountOp.calls || [],
+      calls: [],
       // @ts-ignore - Custom properties for privacy pools withdrawal tracking
       status: AccountOpStatus.BroadcastedButNotConfirmed,
       // @ts-ignore
@@ -1058,45 +900,48 @@ export class PrivacyPoolsController extends EventEmitter {
 
     this.emitUpdate()
 
-    // Build params for relayer API
-    const params: BatchWithdrawalParams = {
-      chainId: this.#pendingWithdrawalParams.chainId,
-      poolAddress: this.#pendingWithdrawalParams.poolAddress,
-      withdrawal: {
-        processooor: this.#pendingWithdrawalParams.processooor,
-        data: this.#pendingWithdrawalParams.data
-      },
-      proofs: this.#pendingWithdrawalProof
-    }
-
     const response = await this.submitBatchWithdrawal(params)
 
-    console.log('DEBUG broadcastWithdrawal: response', response)
-
     if (!response.success || !response.data) {
-      // Update status to Done even on error so user can retry
-      if (this.signAccountOpController) {
-        this.signAccountOpController.updateStatus(SigningStatus.Done)
+      if (this.latestBroadcastedAccountOp) {
+        this.latestBroadcastedAccountOp = {
+          ...this.latestBroadcastedAccountOp,
+          // @ts-ignore
+          status: AccountOpStatus.Failure
+        }
+        this.emitUpdate()
       }
       throw new Error(response.message || 'Withdrawal failed')
     }
 
-    console.log('DEBUG broadcastWithdrawal: response.data', response.data)
-    console.log('DEBUG broadcastWithdrawal: txId', response.data.txId)
-    console.log('DEBUG broadcastWithdrawal: relayerId', response.data.relayerId)
+    let gasFeePayment = null
+    if (this.relayerQuote && this.relayerQuote.estimatedFee) {
+      const feeAmount = BigInt(this.relayerQuote.estimatedFee)
 
-    // Construct a proper SubmittedAccountOp for the activity controller
+      gasFeePayment = {
+        isGasTank: false,
+        paidBy: this.#selectedAccount.account!.addr,
+        inToken: '0x0000000000000000000000000000000000000000', // ETH (native token)
+        feeTokenChainId: BigInt(params.chainId),
+        amount: feeAmount,
+        simulatedGasLimit: 0n, // Not applicable for relayer transactions
+        gasPrice: 0n, // Not applicable for relayer transactions
+        broadcastOption: 'PrivacyPoolsRelayer',
+        isSponsored: false
+      }
+    }
+
     const submittedAccountOp: SubmittedAccountOp = {
       accountAddr: this.#selectedAccount.account!.addr,
       chainId: BigInt(params.chainId),
       signingKeyAddr: null,
       signingKeyType: null,
       gasLimit: null,
-      gasFeePayment: null,
+      gasFeePayment,
       nonce: 0n, // Privacy pools don't use nonces
       signature: response.data.txId as `0x${string}`,
       accountOpToExecuteBefore: null,
-      calls: this.signAccountOpController?.accountOp.calls || [],
+      calls: [],
       status: AccountOpStatus.BroadcastedButNotConfirmed,
       txnId: response.data.txId,
       identifiedBy: {
@@ -1107,49 +952,59 @@ export class PrivacyPoolsController extends EventEmitter {
       meta: {
         // @ts-ignore
         isPrivacyPoolsWithdrawal: true,
-        relayerId: response.data.relayerId
+        relayerId: response.data.relayerId,
+        // @ts-ignore - Store withdrawal details for rich humanization
+        withdrawalData: {
+          recipient: this.recipientAddress, // The user's intended recipient address
+          amount: parseUnits(this.withdrawalAmount, 18).toString(),
+          token: '0x0000000000000000000000000000000000000000', // ETH address (native token)
+          relayerAddress: params.withdrawal.processooor // BatchRelayer contract address
+        }
       }
     }
 
-    console.log(
-      'DEBUG broadcastWithdrawal: Created SubmittedAccountOp for activity controller',
-      submittedAccountOp
-    )
-
     await this.#activity.addAccountOp(submittedAccountOp)
 
-    // Update latestBroadcastedAccountOp to reference the same object for UI tracking
     this.latestBroadcastedAccountOp = submittedAccountOp
 
-    console.log(
-      'DEBUG broadcastWithdrawal: Added to activity controller and updated latestBroadcastedAccountOp',
-      this.latestBroadcastedAccountOp
-    )
-
-    this.#pendingWithdrawalProof = null
-    this.#pendingWithdrawalParams = null
-
-    // Clean up form state and SignAccountOp after successful broadcast
-    // This ensures subsequent transactions start with a clean slate
     this.#cleanupAfterBroadcast()
 
     this.#startTransactionPolling(BigInt(params.chainId), response.data.txId)
 
     this.emitUpdate()
-
-    console.log(
-      'DEBUG broadcastWithdrawal: after emitUpdate, latestBroadcastedAccountOp',
-      this.latestBroadcastedAccountOp
-    )
   }
 
-  /**
-   * Cleanup form state and SignAccountOp after a transaction is broadcast
-   * This ensures subsequent transactions don't have stale state from previous transactions
-   * IMPORTANT: This does NOT clear latestBroadcastedAccountOp which is needed for tracking
-   */
+  async addImportedAccountToActivityController(accountName: string) {
+    if (!this.#selectedAccount?.account) {
+      throw new Error('No account selected')
+    }
+
+    // Construct a proper SubmittedAccountOp for the activity controller
+    const submittedAccountOp: SubmittedAccountOp = {
+      accountAddr: zeroAddress,
+      chainId: BigInt(11155111),
+      signingKeyAddr: null,
+      signingKeyType: null,
+      gasLimit: null,
+      gasFeePayment: null,
+      nonce: 0n, // Privacy pools don't use nonces
+      signature: '0x' as `0x${string}`,
+      accountOpToExecuteBefore: null,
+      calls: [],
+      status: AccountOpStatus.Success,
+      txnId: new Date().getTime().toString(),
+      identifiedBy: {
+        type: 'ImportedAccount',
+        identifier: accountName
+      },
+      timestamp: new Date().getTime()
+    }
+
+    await this.#activity.addAccountOp(submittedAccountOp)
+    this.emitUpdate()
+  }
+
   #cleanupAfterBroadcast() {
-    // Clear form state
     this.selectedToken = null
     this.depositAmount = ''
     this.withdrawalAmount = ''
@@ -1159,20 +1014,13 @@ export class PrivacyPoolsController extends EventEmitter {
     this.isRecipientAddressUnknown = false
     this.isRecipientAddressUnknownAgreed = false
     this.programmaticUpdateCounter = 0
-    this.validationFormMsgs = {
-      amount: { success: true, message: '' },
-      recipientAddress: { success: true, message: '' }
-    }
     this.relayerQuote = null
     this.updateQuoteStatus = 'INITIAL'
     this.#updateQuoteId = undefined
     this.batchSize = 1
 
-    // Stop quote refetch
     this.#stopQuoteRefetch()
 
-    // Destroy SignAccountOp controller (no longer needed after broadcast)
-    // Unsubscribe from all previous subscriptions
     this.#signAccountOpSubscriptions.forEach((unsubscribe) => unsubscribe())
     this.#signAccountOpSubscriptions = []
 
@@ -1187,9 +1035,6 @@ export class PrivacyPoolsController extends EventEmitter {
     }
 
     this.hasProceeded = false
-
-    // Note: We do NOT clear latestBroadcastedAccountOp or latestBroadcastedToken
-    // as they are needed for the tracking screen
   }
 
   async resetSecret() {
@@ -1198,12 +1043,20 @@ export class PrivacyPoolsController extends EventEmitter {
   }
 
   async syncSignAccountOp(calls?: Call[]) {
-    if (!this.#selectedAccount?.account) return
+    console.log('DEBUG syncSignAccountOp: called')
+    if (!this.#selectedAccount?.account) {
+      console.log('DEBUG syncSignAccountOp: no selected account, returning')
+      return
+    }
 
-    // Build the calls based on your privacy pools operations
     const transactionCalls: Call[] = calls || []
 
-    if (!transactionCalls.length) return
+    if (!transactionCalls.length) {
+      console.log('DEBUG syncSignAccountOp: no calls, returning')
+      return
+    }
+
+    console.log('DEBUG syncSignAccountOp: controller exists?', !!this.signAccountOpController)
 
     try {
       // IMPORTANT: Enable tracking for the upcoming broadcast
@@ -1211,11 +1064,9 @@ export class PrivacyPoolsController extends EventEmitter {
       // whether to set latestBroadcastedAccountOp after successful broadcast
       this.shouldTrackLatestBroadcastedAccountOp = true
 
-      // If SignAccountOpController is already initialized, we just update it
       if (this.signAccountOpController) {
         this.signAccountOpController.update({ calls: transactionCalls })
 
-        // Update withdrawal metadata if we have pending withdrawal
         if (this.#pendingWithdrawalParams) {
           if (!this.signAccountOpController.accountOp.meta) {
             this.signAccountOpController.accountOp.meta = {}
@@ -1244,13 +1095,20 @@ export class PrivacyPoolsController extends EventEmitter {
   }
 
   async reestimate() {
-    // Don't run the estimation loop if there is no SignAccountOpController or if the loop is already running.
-    if (!this.signAccountOpController || this.#reestimateAbortController) return
+    if (!this.signAccountOpController || this.#reestimateAbortController) {
+      return
+    }
 
     this.#reestimateAbortController = new AbortController()
     const signal = this.#reestimateAbortController!.signal
 
     const loop = async () => {
+      // Trigger initial estimation immediately instead of waiting 30 seconds
+      if (this.signAccountOpController?.estimation.status !== EstimationStatus.Loading) {
+        // eslint-disable-next-line no-await-in-loop
+        await this.signAccountOpController?.estimate()
+      }
+
       while (!signal.aborted) {
         // eslint-disable-next-line no-await-in-loop
         await wait(30000)
@@ -1261,23 +1119,18 @@ export class PrivacyPoolsController extends EventEmitter {
           await this.signAccountOpController?.estimate()
         }
 
-        if (this.signAccountOpController?.estimation.errors.length) {
-          console.log(
-            'DEBUG: Errors on PrivacyPools re-estimate',
-            this.signAccountOpController.estimation.errors
-          )
-        }
+        // if (this.signAccountOpController?.estimation.errors.length) {
+        //   console.log(
+        //     'DEBUG: Errors on PrivacyPools re-estimate',
+        //     this.signAccountOpController.estimation.errors
+        //   )
+        // }
       }
     }
 
     loop()
   }
 
-  /**
-   * Submit batch withdrawal to relayer API
-   * This method sends the batch withdrawal proofs to the relayer endpoint
-   * instead of directly encoding and broadcasting the transaction
-   */
   async submitBatchWithdrawal(params: BatchWithdrawalParams): Promise<BatchWithdrawalResponse> {
     try {
       // Convert all bigint values to strings for JSON serialization
@@ -1296,13 +1149,9 @@ export class PrivacyPoolsController extends EventEmitter {
         }))
       }
 
-      console.log('DEBUG: serializedParams', serializedParams)
-
       const response = await this.#callRelayer('/relayer/batch/request', 'POST', serializedParams, {
         'Content-Type': 'application/json'
       })
-
-      console.log('DEBUG: response', response)
 
       if (!response.success) {
         throw new Error(response.message || 'Batch withdrawal submission failed')
@@ -1335,10 +1184,7 @@ export class PrivacyPoolsController extends EventEmitter {
   }
 
   #startTransactionPolling(chainId: bigint, txId: string) {
-    // Stop any existing polling
     this.#stopTransactionPolling()
-
-    console.log('DEBUG: Starting transaction polling', { chainId: chainId.toString(), txId })
 
     const network = this.#networks.networks.find((net) => net.chainId === chainId)
     if (!network) {
@@ -1351,8 +1197,6 @@ export class PrivacyPoolsController extends EventEmitter {
       console.error('DEBUG: Provider not found for chainId:', chainId)
       return
     }
-
-    console.log('DEBUG: Provider found, starting polling loop')
 
     this.#transactionPollingAbortController = new AbortController()
     const signal = this.#transactionPollingAbortController.signal
@@ -1376,7 +1220,7 @@ export class PrivacyPoolsController extends EventEmitter {
             const newStatus = AccountOpStatus.BroadcastButStuck
             console.log('DEBUG: Transaction timeout, marking as stuck')
 
-            if (this.latestBroadcastedAccountOp) {
+            if (this.latestBroadcastedAccountOp && this.#selectedAccount?.account) {
               // Update local tracking
               this.latestBroadcastedAccountOp = {
                 ...this.latestBroadcastedAccountOp,
@@ -1387,7 +1231,7 @@ export class PrivacyPoolsController extends EventEmitter {
               // Update ActivityController for persistence
               // eslint-disable-next-line no-await-in-loop
               await this.#activity.updateAccountOpStatus(
-                this.#selectedAccount.account!.addr,
+                this.#selectedAccount.account.addr,
                 chainId,
                 txId,
                 newStatus
@@ -1405,28 +1249,19 @@ export class PrivacyPoolsController extends EventEmitter {
           const receipt = await provider.getTransactionReceipt(txId)
 
           if (receipt) {
-            console.log('DEBUG: Transaction receipt found!', {
-              status: receipt.status,
-              blockNumber: receipt.blockNumber,
-              gasUsed: receipt.gasUsed?.toString()
-            })
-
-            // Determine success based on receipt status
             const isSuccess = !!receipt.status
             const newStatus = isSuccess ? AccountOpStatus.Success : AccountOpStatus.Failure
 
-            if (this.latestBroadcastedAccountOp) {
-              // Update local tracking
+            if (this.latestBroadcastedAccountOp && this.#selectedAccount?.account) {
               this.latestBroadcastedAccountOp = {
                 ...this.latestBroadcastedAccountOp,
                 // @ts-ignore - Update status based on receipt
                 status: newStatus
               }
 
-              // Update ActivityController for persistence
               // eslint-disable-next-line no-await-in-loop
               await this.#activity.updateAccountOpStatus(
-                this.#selectedAccount.account!.addr,
+                this.#selectedAccount.account.addr,
                 chainId,
                 txId,
                 newStatus
@@ -1483,7 +1318,6 @@ export class PrivacyPoolsController extends EventEmitter {
 
     this.#selectedToken = token
 
-    // Reset amounts when token changes
     if (
       prevSelectedToken?.address !== token?.address ||
       prevSelectedToken?.chainId !== token?.chainId
@@ -1498,6 +1332,73 @@ export class PrivacyPoolsController extends EventEmitter {
 
   get selectedToken() {
     return this.#selectedToken
+  }
+
+  get validationFormMsgs() {
+    const validationFormMsgsNew = { ...DEFAULT_VALIDATION_FORM_MSGS }
+
+    if (this.depositAmount && this.selectedToken && this.selectedToken.decimals) {
+      try {
+        const amountToValidate = formatUnits(
+          BigInt(this.depositAmount),
+          this.selectedToken.decimals
+        )
+
+        const poolInfo = this.pools.find(
+          (pool) => BigInt(pool.chainId) === this.selectedToken.chainId
+        )
+
+        if (poolInfo) {
+          validationFormMsgsNew.amount = validatePrivacyPoolsDepositAmount(
+            amountToValidate,
+            this.selectedToken,
+            poolInfo.minDeposit,
+            poolInfo.maxDeposit
+          )
+        } else {
+          validationFormMsgsNew.amount = {
+            success: false,
+            message: 'Pool configuration not found for this token.'
+          }
+        }
+      } catch (error) {
+        console.error('Failed to format deposit amount:', error)
+        validationFormMsgsNew.amount = {
+          success: false,
+          message: 'Invalid amount.'
+        }
+      }
+    }
+
+    if (this.withdrawalAmount && this.#selectedAccount?.account?.addr && this.recipientAddress) {
+      const isEnsAddress = !!this.addressState.ensAddress
+
+      if (!isValidAddress(this.recipientAddress)) {
+        validationFormMsgsNew.recipientAddress = {
+          success: false,
+          message: 'Invalid address format'
+        }
+      } else if (this.addressState.isDomainResolving) {
+        validationFormMsgsNew.recipientAddress = {
+          success: false,
+          message: 'Resolving domain...'
+        }
+      } else {
+        validationFormMsgsNew.recipientAddress = validateSendTransferAddress(
+          this.recipientAddress,
+          this.#selectedAccount.account.addr,
+          this.isRecipientAddressUnknownAgreed,
+          this.isRecipientAddressUnknown,
+          false, // isRecipientHumanizerKnownTokenOrSmartContract - not used in privacy pools
+          isEnsAddress,
+          this.addressState.isDomainResolving,
+          false, // isSWWarningVisible - not used in privacy pools
+          false // isSWWarningAgreed - not used in privacy pools
+        )
+      }
+    }
+
+    return validationFormMsgsNew
   }
 
   get isInitialized(): boolean {
@@ -1528,7 +1429,8 @@ export class PrivacyPoolsController extends EventEmitter {
       initialPromiseLoaded: this.initialPromiseLoaded,
       hasPersistedState: this.hasPersistedState,
       selectedToken: this.selectedToken,
-      recipientAddress: this.recipientAddress
+      recipientAddress: this.recipientAddress,
+      validationFormMsgs: this.validationFormMsgs
     }
   }
 }

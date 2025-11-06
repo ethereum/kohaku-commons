@@ -37,7 +37,13 @@ import { AccountOpStatus, Call } from './types'
  * database ID record
  */
 export type AccountOpIdentifiedBy = {
-  type: 'Transaction' | 'UserOperation' | 'Relayer' | 'MultipleTxns' | 'PrivacyPoolsRelayer'
+  type:
+    | 'Transaction'
+    | 'UserOperation'
+    | 'Relayer'
+    | 'MultipleTxns'
+    | 'PrivacyPoolsRelayer'
+    | 'ImportedAccount'
   identifier: string
   bundler?: BUNDLER
 }
