@@ -1692,7 +1692,7 @@ export class SignAccountOpController extends EventEmitter {
     if (errorResponse.message.indexOf('invalid account nonce') !== -1) {
       // silenly continuing on error as this is an attempt for an UX improvement
       await this.#accounts
-        .updateAccountState(this.accountOp.accountAddr, 'pending', [this.accountOp.chainId])
+        .updateAccountState(this.accountOp.accountAddr, 'latest', [this.accountOp.chainId])
         .catch((e) => e)
     }
 

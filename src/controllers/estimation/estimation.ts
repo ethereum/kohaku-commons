@@ -206,7 +206,8 @@ export class EstimationController extends EventEmitter {
       (this.estimation.flags.hasNonceDiscrepancy || this.estimation.flags.has4337NonceDiscrepancy)
     )
       // silenly continuing on error here as the flags are more like app helpers
-      this.#accounts.updateAccountState(op.accountAddr, 'pending', [op.chainId]).catch((e) => e)
+      // Switched to 'latest' instead of 'pending' because a light client can't fetch the pending state
+      this.#accounts.updateAccountState(op.accountAddr, 'latest', [op.chainId]).catch((e) => e)
 
     this.hasEstimated = true
     this.emitUpdate()
