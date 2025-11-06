@@ -19,12 +19,15 @@ import { randomId } from '../../libs/humanizer/utils'
 import { getPrivateKeyFromSeed } from '../../libs/keyIterator/keyIterator'
 import { HD_PATH_TEMPLATE_TYPE, BIP44_STANDARD_DERIVATION_TEMPLATE } from '../../consts/derivation'
 import { EstimationStatus } from '../estimation/types'
+import { validatePrivacyPoolsDepositAmount } from '../../services/privacyPools/validations'
+import { formatUnits } from 'viem'
 import wait from '../../utils/wait'
 
 interface RailgunFormUpdate {
   depositAmount?: string
   privacyProvider?: string
   chainId?: number
+  selectedToken?: any
 }
 
 export type RailgunAccountKeys = {
@@ -55,6 +58,17 @@ const DEFAULT_ADDRESS_STATE = {
   fieldValue: '',
   ensAddress: '',
   isDomainResolving: false
+}
+
+const DEFAULT_VALIDATION_FORM_MSGS = {
+  amount: {
+    success: false,
+    message: ''
+  },
+  recipientAddress: {
+    success: false,
+    message: ''
+  }
 }
 
 export class RailgunController extends EventEmitter {
@@ -104,14 +118,6 @@ export class RailgunController extends EventEmitter {
   // every "get" must end up here so popup can see it
   derivedRailgunKeysByIndex: Record<number, RailgunAccountKeys> = {}
   lastFetchedRailgunAccountCache: RailgunAccountCacheFetch | null = null
-
-  validationFormMsgs: {
-    amount: { success: boolean; message: string }
-    recipientAddress: { success: boolean; message: string }
-  } = {
-    amount: { success: true, message: '' },
-    recipientAddress: { success: true, message: '' }
-  }
 
   constructor(
     keystore: KeystoreController,
@@ -414,8 +420,8 @@ export class RailgunController extends EventEmitter {
   // ─────────────────────────────────────────────
   // FORM / UI-LEVEL HELPERS (kept)
   // ─────────────────────────────────────────────
-  update({ depositAmount, privacyProvider, chainId }: RailgunFormUpdate) {
-    console.log('DEBUG: RAILGUN CONTROLLER UPDATE', { depositAmount, privacyProvider, chainId })
+  update({ depositAmount, privacyProvider, chainId, selectedToken }: RailgunFormUpdate) {
+    console.log('DEBUG: RAILGUN CONTROLLER UPDATE', { depositAmount, privacyProvider, chainId, selectedToken })
 
     if (typeof depositAmount === 'string') {
       this.depositAmount = depositAmount
@@ -427,6 +433,9 @@ export class RailgunController extends EventEmitter {
 
     if (typeof chainId === 'number') {
       this.chainId = chainId
+    }
+    if (selectedToken !== undefined) {
+      this.selectedToken = selectedToken
     }
 
     this.emitUpdate()
@@ -449,10 +458,6 @@ export class RailgunController extends EventEmitter {
     this.isRecipientAddressUnknownAgreed = false
     this.latestBroadcastedToken = null
     this.programmaticUpdateCounter = 0
-    this.validationFormMsgs = {
-      amount: { success: true, message: '' },
-      recipientAddress: { success: true, message: '' }
-    }
     this.#isInitialized = false
 
     if (shouldDestroyAccountOp) {
@@ -524,6 +529,36 @@ export class RailgunController extends EventEmitter {
     return this.addressState.ensAddress || this.addressState.fieldValue
   }
 
+  get validationFormMsgs() {
+    const validationFormMsgsNew = { ...DEFAULT_VALIDATION_FORM_MSGS }
+
+    if (this.depositAmount && this.selectedToken && this.selectedToken.decimals) {
+      try {
+        const amountToValidate = formatUnits(
+          BigInt(this.depositAmount),
+          this.selectedToken.decimals
+        )
+
+        validationFormMsgsNew.amount = validatePrivacyPoolsDepositAmount(
+          amountToValidate,
+          this.selectedToken,
+          BigInt(0),
+          BigInt("0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff")
+        )
+      } catch (error) {
+        console.error('Failed to format deposit amount:', error)
+        validationFormMsgsNew.amount = {
+          success: false,
+          message: 'Invalid amount.'
+        }
+      }
+    }
+
+    // TODO: handle withdrawal validation when implement withdrawals
+
+    return validationFormMsgsNew
+  }
+
   // ─────────────────────────────────────────────
   // SERIALIZATION
   // ─────────────────────────────────────────────
@@ -539,11 +574,10 @@ export class RailgunController extends EventEmitter {
       depositAmount: this.depositAmount,
       privacyProvider: this.privacyProvider,
       infuraApiKey: this.infuraApiKey,
-      
-      // 👇 expose all “gets” so popup can poll
       defaultRailgunKeys: this.defaultRailgunKeys,
       derivedRailgunKeysByIndex: this.derivedRailgunKeysByIndex,
-      lastFetchedRailgunAccountCache: this.lastFetchedRailgunAccountCache
+      lastFetchedRailgunAccountCache: this.lastFetchedRailgunAccountCache,
+      validationFormMsgs: this.validationFormMsgs
     }
   }
 }
