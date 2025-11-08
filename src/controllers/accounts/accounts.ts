@@ -9,6 +9,7 @@ import {
 } from '../../interfaces/account'
 import { getUniqueAccountsArray } from '../../libs/account/account'
 import { getAccountState } from '../../libs/accountState/accountState'
+import { getDappIdFromUrl } from '../../libs/dapps/helpers'
 import EventEmitter, { Statuses } from '../eventEmitter/eventEmitter'
 import { KeystoreController } from '../keystore/keystore'
 import { NetworksController } from '../networks/networks'
@@ -279,26 +280,12 @@ export class AccountsController extends EventEmitter {
   }
 
   async setAssociatedDapps(addr: string, dappUrls: string[]) {
-    dappUrls = dappUrls.map((url) => {
-      if (url.trim() === '') return ""
-      try {
-        const urlObj = new URL(url.startsWith('http') ? url : `http://${url}`)
-        let domain = urlObj.hostname
-        const domainParts = domain.split('.')
-        if (domainParts.length > 2) {
-          domain = domainParts.slice(-2).join('.')
-        }
-        return domain
-      } catch {
-        return ""
-      }
-    })
-      .filter((url) => url !== "")
-      .filter((url, index, self) => self.indexOf(url) === index)
-
+    let dappIDs = dappUrls.map((url) => getDappIdFromUrl(url))
+    dappIDs = Array.from(new Set(dappIDs))
+    console.log('Updated associatedDappIDs for account', addr, dappIDs)
     this.accounts = this.accounts.map((acc) => {
       if (acc.addr !== addr) return acc
-      return { ...acc, associatedDapps: dappUrls }
+      return { ...acc, associatedDappIDs: dappIDs }
     })
 
     this.emitUpdate()
