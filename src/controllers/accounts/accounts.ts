@@ -280,12 +280,36 @@ export class AccountsController extends EventEmitter {
   }
 
   async setAssociatedDapps(addr: string, dappUrls: string[]) {
+    console.log('Setting associated dapp URLs for account', addr, dappUrls)
     let dappIDs = dappUrls.map((url) => getDappIdFromUrl(url))
     dappIDs = Array.from(new Set(dappIDs))
     console.log('Updated associatedDappIDs for account', addr, dappIDs)
     this.accounts = this.accounts.map((acc) => {
       if (acc.addr !== addr) return acc
       return { ...acc, associatedDappIDs: dappIDs }
+    })
+
+    this.emitUpdate()
+    await this.#storage.set('accounts', this.accounts)
+  }
+
+  async setAssociatedSessionId(addr: string, sessionId: string) {
+    console.log('Setting associated sessionId for account', addr, sessionId)
+    // Remove the sessionId from all accounts
+    this.accounts = this.accounts.map((acc) => {
+      return {
+        ...acc,
+        associatedSessionIds: acc.associatedSessionIds?.filter((id) => id !== sessionId)
+      }
+    })
+
+    // Add the sessionId to the specified account
+    this.accounts = this.accounts.map((acc) => {
+      if (acc.addr !== addr) return acc
+      const updatedSessionIds = acc.associatedSessionIds
+        ? [...acc.associatedSessionIds, sessionId]
+        : [sessionId]
+      return { ...acc, associatedSessionIds: updatedSessionIds }
     })
 
     this.emitUpdate()
