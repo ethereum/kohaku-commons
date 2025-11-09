@@ -709,29 +709,25 @@ export class MainController extends EventEmitter {
 
   async handleBroadcastUnlock() {
     for (const session of Object.values(this.dapps.dappSessions)) {
-      console.log('accounts', this.accounts.accounts)
-      const accounts = this.accounts.accounts.filter(
-        (acc) => acc.associatedDappIDs?.includes(session.id)
-      )
-      const accountAddrs = accounts.map((acc) => acc.addr)
-      if (accountAddrs && accountAddrs.length > 0) {
-        console.log('Broadcasting unlock to dapp session', session.id, accountAddrs)
-        await this.dapps.broadcastDappSessionEvent('unlock', accountAddrs, session.id)
-      }
+      const dapp = this.dapps.getDapp(session.id)
+      if (!dapp) continue
+
+      const account = dapp.account
+      if (!account) continue
+      console.log('Broadcasting unlock to dapp session', session.id, [account])
+      await this.dapps.broadcastDappSessionEvent('unlock', [account], session.id)
     }
   }
 
   async handleBroadcastAccountsChanged() {
     for (const session of Object.values(this.dapps.dappSessions)) {
-      console.log('accounts', this.accounts.accounts)
-      const accounts = this.accounts.accounts.filter(
-        (acc) => acc.associatedDappIDs?.includes(session.id)
-      )
-      const accountAddrs = accounts.map((acc) => acc.addr)
-      if (accountAddrs && accountAddrs.length > 0) {
-        console.log('Broadcasting accountsChanged to dapp session', session.id, accountAddrs)
-        await this.dapps.broadcastDappSessionEvent('accountsChanged', accountAddrs, session.id)
-      }
+      const dapp = this.dapps.getDapp(session.id)
+      if (!dapp) continue
+
+      const account = dapp.account
+      if (!account) continue
+      console.log('Broadcasting unlock to dapp session', session.id, [account])
+      await this.dapps.broadcastDappSessionEvent('accountsChanged', [account], session.id)
     }
   }
 

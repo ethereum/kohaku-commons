@@ -293,29 +293,6 @@ export class AccountsController extends EventEmitter {
     await this.#storage.set('accounts', this.accounts)
   }
 
-  async setAssociatedSessionId(addr: string, sessionId: string) {
-    console.log('Setting associated sessionId for account', addr, sessionId)
-    // Remove the sessionId from all accounts
-    this.accounts = this.accounts.map((acc) => {
-      return {
-        ...acc,
-        associatedSessionIds: acc.associatedSessionIds?.filter((id) => id !== sessionId)
-      }
-    })
-
-    // Add the sessionId to the specified account
-    this.accounts = this.accounts.map((acc) => {
-      if (acc.addr !== addr) return acc
-      const updatedSessionIds = acc.associatedSessionIds
-        ? [...acc.associatedSessionIds, sessionId]
-        : [sessionId]
-      return { ...acc, associatedSessionIds: updatedSessionIds }
-    })
-
-    this.emitUpdate()
-    await this.#storage.set('accounts', this.accounts)
-  }
-
   get areAccountStatesLoading() {
     return Object.values(this.accountStatesLoadingState).some((isLoading) => isLoading)
   }

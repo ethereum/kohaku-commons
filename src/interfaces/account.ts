@@ -20,14 +20,6 @@ export interface Account {
   // Associated dapp IDs for which the account will
   // be suggested by default
   associatedDappIDs?: string[]
-  // TODO: Consider moving this into the `Dapp` interface,
-  // if you can find a good way to initialize it when connecting
-  // with a new dapp.
-  // 
-  // Associated session IDs for the account. Each 
-  // session ID should be unique in the list of all 
-  // accounts.
-  associatedSessionIds?: string[]
   email?: string
   newlyCreated?: boolean
   newlyAdded?: boolean
