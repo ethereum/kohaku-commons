@@ -111,6 +111,7 @@ export class RailgunController extends EventEmitter {
   programmaticUpdateCounter: number = 0
   withdrawalAmount: string = ''
   maxAmount: string = ''
+  withdrawAsWETH: boolean = false
 
   // railgun-specific
   defaultRailgunKeys: RailgunAccountKeys | null = null
