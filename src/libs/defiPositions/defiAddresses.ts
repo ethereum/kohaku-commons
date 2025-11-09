@@ -24,9 +24,9 @@ export const AAVE_V3 = {
   '43114': {
     poolAddr: '0x794a61358D6845594F94dc1DB02A252b5b4814aD'
   },
-  '11155111': {
-    poolAddr: '0x6Ae43d3271ff6888e7Fc43Fd7321a503ff738951'
-  },
+  // '11155111': {
+  //   poolAddr: '0x6Ae43d3271ff6888e7Fc43Fd7321a503ff738951'
+  // },
   // custom chains
   // harmony
   // unreliable
