@@ -13,7 +13,7 @@ import { HDNodeWallet, Mnemonic } from 'ethers'
 import type { KeystoreController } from '../keystore/keystore'
 import { type ChainData, chainData, whitelistedChains } from './config'
 import EventEmitter from '../eventEmitter/eventEmitter'
-import { SignAccountOpController } from '../signAccountOp/signAccountOp'
+import { SignAccountOpController, SigningStatus } from '../signAccountOp/signAccountOp'
 import { getBaseAccount } from '../../libs/account/getBaseAccount'
 import { AccountOp } from '../../libs/accountOp/accountOp'
 import { AccountOpStatus, Call } from '../../libs/accountOp/types'
@@ -397,20 +397,57 @@ export class PrivacyPoolsController extends EventEmitter {
   }
 
   async #initSignAccOp(calls: Call[]) {
-    if (!this.#selectedAccount?.account || this.signAccountOpController || !this.#accounts) return
+    console.log('DEBUG: Privacy Pools #initSignAccOp: START', {
+      hasSelectedAccount: !!this.#selectedAccount?.account,
+      hasController: !!this.signAccountOpController,
+      hasAccounts: !!this.#accounts,
+      callsCount: calls.length
+    })
+    
+    if (!this.#selectedAccount?.account) {
+      console.error('DEBUG: Privacy Pools #initSignAccOp: no selected account')
+      return
+    }
+    
+    if (this.signAccountOpController) {
+      console.error('DEBUG: Privacy Pools #initSignAccOp: controller already exists!')
+      return
+    }
+    
+    if (!this.#accounts) {
+      console.error('DEBUG: Privacy Pools #initSignAccOp: no accounts controller')
+      return
+    }
+    
     // Use the network from the first call to determine the chainId
     const chainId = calls.length > 0 ? BigInt(11155111) : 11155111n // Default to Sepolia for now
+    console.log('DEBUG: Privacy Pools #initSignAccOp: looking for network', { chainId })
     const network = this.#networks.networks.find((net) => net.chainId === chainId)
 
-    if (!network) return
-
+    if (!network) {
+      console.error('DEBUG: Privacy Pools #initSignAccOp: network not found', { chainId })
+      return
+    }
+    
+    console.log('DEBUG: Privacy Pools #initSignAccOp: network found', { chainId: network.chainId, name: network.name })
     const provider = this.#providers.providers[network.chainId.toString()]
+    
+    if (!provider) {
+      console.error('DEBUG: Privacy Pools #initSignAccOp: provider not found', { chainId: network.chainId })
+      return
+    }
+    
+    console.log('DEBUG: Privacy Pools #initSignAccOp: fetching account state')
     const accountState = await this.#accounts.getOrFetchAccountOnChainState(
       this.#selectedAccount.account.addr,
       network.chainId
     )
+    console.log('DEBUG: Privacy Pools #initSignAccOp: account state fetched', { nonce: accountState.nonce })
 
-    if (!this.#keystore) return
+    if (!this.#keystore) {
+      console.error('DEBUG: Privacy Pools #initSignAccOp: no keystore')
+      return
+    }
 
     const baseAcc = getBaseAccount(
       this.#selectedAccount.account,
@@ -435,22 +472,31 @@ export class PrivacyPoolsController extends EventEmitter {
       }
     }
 
-    this.signAccountOpController = new SignAccountOpController(
-      this.#accounts,
-      this.#networks,
-      this.#keystore,
-      this.#portfolio,
-      this.#activity,
-      this.#externalSignerControllers,
-      this.#selectedAccount.account,
-      network,
-      provider,
-      randomId(), // the account op and the action are fabricated
-      accountOp,
-      () => true,
-      false,
-      undefined
-    )
+    console.log('DEBUG: Privacy Pools #initSignAccOp: creating SignAccountOpController')
+    try {
+      this.signAccountOpController = new SignAccountOpController(
+        this.#accounts,
+        this.#networks,
+        this.#keystore,
+        this.#portfolio,
+        this.#activity,
+        this.#externalSignerControllers,
+        this.#selectedAccount.account,
+        network,
+        provider,
+        randomId(), // the account op and the action are fabricated
+        accountOp,
+        () => true,
+        false,
+        undefined
+      )
+      console.log('DEBUG: Privacy Pools #initSignAccOp: SignAccountOpController created', {
+        controllerId: this.signAccountOpController ? 'exists' : 'null'
+      })
+    } catch (e) {
+      console.error('DEBUG: Privacy Pools #initSignAccOp: ERROR creating controller', e)
+      throw e
+    }
 
     this.#signAccountOpSubscriptions.push(
       this.signAccountOpController.onUpdate(() => {
@@ -459,13 +505,16 @@ export class PrivacyPoolsController extends EventEmitter {
     )
     this.#signAccountOpSubscriptions.push(
       this.signAccountOpController.onError((error) => {
+        console.error('DEBUG: Privacy Pools #initSignAccOp: controller error callback', error)
         if (this.signAccountOpController)
           this.#portfolio.overridePendingResults(this.signAccountOpController.accountOp)
         this.emitError(error)
       })
     )
 
+    console.log('DEBUG: Privacy Pools #initSignAccOp: starting reestimate')
     this.reestimate()
+    console.log('DEBUG: Privacy Pools #initSignAccOp: COMPLETE')
   }
 
   #calculateAmountInFiat(amount: string) {
@@ -549,7 +598,20 @@ export class PrivacyPoolsController extends EventEmitter {
     }
 
     if (typeof privacyProvider === 'string') {
+      const previousProvider = this.privacyProvider
       this.privacyProvider = privacyProvider
+      
+      // When switching providers, destroy sign account op controller and reset state to ensure clean state
+      // This prevents stale RPC connections (e.g., Helios) and error states from persisting
+      if (previousProvider && previousProvider !== privacyProvider) {
+        console.log('DEBUG: Privacy Pools provider changed, destroying sign account op controller and resetting state')
+        if (this.signAccountOpController) {
+          this.destroySignAccountOp()
+        }
+        // Explicitly reset hasProceeded when switching providers to ensure clean state
+        // This is critical when switching from another provider (e.g., Railgun)
+        this.hasProceeded = false
+      }
     }
 
     if (typeof withdrawalAmount === 'string') {
@@ -786,23 +848,77 @@ export class PrivacyPoolsController extends EventEmitter {
     this.emitUpdate()
   }
 
-  destroySignAccountOp() {
-    this.#signAccountOpSubscriptions.forEach((unsubscribe) => unsubscribe())
+  destroySignAccountOp(forceProviderRecreate: boolean = false) {
+    console.log('DEBUG: Privacy Pools destroySignAccountOp: START', {
+      hasController: !!this.signAccountOpController,
+      hasSubscriptions: this.#signAccountOpSubscriptions.length > 0,
+      hasReestimateAbort: !!this.#reestimateAbortController,
+      hasProceeded: this.hasProceeded,
+      forceProviderRecreate
+    })
+    
+    // Check if controller has errors - if so, force provider recreation
+    const hasErrors = (this.signAccountOpController?.errors.length ?? 0) > 0 || 
+                     this.signAccountOpController?.estimation.status === EstimationStatus.Error ||
+                     this.signAccountOpController?.status?.type === SigningStatus.EstimationError
+    
+    const shouldRecreateProvider = forceProviderRecreate || hasErrors
+    
+    this.#signAccountOpSubscriptions.forEach((unsubscribe) => {
+      try {
+        unsubscribe()
+      } catch (e) {
+        console.error('DEBUG: Privacy Pools destroySignAccountOp: error unsubscribing', e)
+      }
+    })
     this.#signAccountOpSubscriptions = []
 
     if (this.#reestimateAbortController) {
-      this.#reestimateAbortController.abort()
+      try {
+        this.#reestimateAbortController.abort()
+      } catch (e) {
+        console.error('DEBUG: Privacy Pools destroySignAccountOp: error aborting reestimate', e)
+      }
       this.#reestimateAbortController = null
     }
 
+    // Get chainId before destroying controller (for provider recreation)
+    const chainId = this.signAccountOpController?.accountOp?.chainId
+
     if (this.signAccountOpController) {
-      this.signAccountOpController.reset()
+      try {
+        console.log('DEBUG: Privacy Pools destroySignAccountOp: resetting controller', {
+          status: this.signAccountOpController.status?.type,
+          estimationStatus: this.signAccountOpController.estimation.status,
+          hasErrors: this.signAccountOpController.errors.length > 0
+        })
+        this.signAccountOpController.reset()
+      } catch (e) {
+        console.error('DEBUG: Privacy Pools destroySignAccountOp: error resetting controller', e)
+      }
       this.signAccountOpController = null
+    }
+
+    // Force provider recreation if there were errors (Helios might be in bad state)
+    if (shouldRecreateProvider && chainId && this.#providers) {
+      console.log('DEBUG: Privacy Pools destroySignAccountOp: forcing provider recreation due to errors', { chainId })
+      try {
+        this.#providers.forceRecreateProvider(chainId)
+      } catch (e) {
+        console.error('DEBUG: Privacy Pools destroySignAccountOp: error recreating provider', e)
+      }
     }
 
     this.#stopQuoteRefetch()
     this.#pendingWithdrawalParams = null
     this.hasProceeded = false
+    
+    console.log('DEBUG: Privacy Pools destroySignAccountOp: COMPLETE', {
+      controllerIsNull: this.signAccountOpController === null,
+      hasProceeded: this.hasProceeded,
+      providerRecreated: shouldRecreateProvider
+    })
+    
     this.emitUpdate()
   }
 
@@ -1043,20 +1159,29 @@ export class PrivacyPoolsController extends EventEmitter {
   }
 
   async syncSignAccountOp(calls?: Call[]) {
-    console.log('DEBUG syncSignAccountOp: called')
+    console.log('DEBUG: Privacy Pools syncSignAccountOp: CALLED', {
+      callsCount: calls?.length || 0,
+      hasSelectedAccount: !!this.#selectedAccount?.account,
+      controllerExists: !!this.signAccountOpController,
+      hasProceeded: this.hasProceeded
+    })
+    
     if (!this.#selectedAccount?.account) {
-      console.log('DEBUG syncSignAccountOp: no selected account, returning')
+      console.error('DEBUG: Privacy Pools syncSignAccountOp: no selected account, returning')
       return
     }
 
     const transactionCalls: Call[] = calls || []
 
     if (!transactionCalls.length) {
-      console.log('DEBUG syncSignAccountOp: no calls, returning')
+      console.error('DEBUG: Privacy Pools syncSignAccountOp: no calls, returning')
       return
     }
 
-    console.log('DEBUG syncSignAccountOp: controller exists?', !!this.signAccountOpController)
+    console.log('DEBUG: Privacy Pools syncSignAccountOp: transaction calls prepared', {
+      callsCount: transactionCalls.length,
+      firstCallTo: transactionCalls[0]?.to
+    })
 
     try {
       // IMPORTANT: Enable tracking for the upcoming broadcast
@@ -1064,31 +1189,91 @@ export class PrivacyPoolsController extends EventEmitter {
       // whether to set latestBroadcastedAccountOp after successful broadcast
       this.shouldTrackLatestBroadcastedAccountOp = true
 
+      // If a controller already exists, try to reuse it if it's healthy
+      // This prevents unnecessary destruction/recreation which causes delays and errors
       if (this.signAccountOpController) {
-        this.signAccountOpController.update({ calls: transactionCalls })
+        const isWithdrawal = !!this.#pendingWithdrawalParams
+        
+        // Check if controller is in an error state - if so, always destroy and recreate
+        const hasErrors = this.signAccountOpController.errors.length > 0
+        const isInErrorState = 
+          this.signAccountOpController.status?.type === SigningStatus.EstimationError ||
+          this.signAccountOpController.estimation.status === EstimationStatus.Error
 
-        if (this.#pendingWithdrawalParams) {
-          if (!this.signAccountOpController.accountOp.meta) {
-            this.signAccountOpController.accountOp.meta = {}
+        // Try to reuse controller if it's healthy (works for both deposits and withdrawals)
+        if (!hasErrors && !isInErrorState) {
+          console.log('DEBUG: Privacy Pools syncSignAccountOp: updating existing healthy controller', { isWithdrawal })
+          
+          // Reset hasProceeded to ensure clean state when reusing controller
+          this.hasProceeded = false
+          
+          // Update the controller with new calls (update method handles if calls are same/different)
+          this.signAccountOpController.update({ calls: transactionCalls })
+
+          // For withdrawals, also update the withdrawal metadata
+          if (isWithdrawal) {
+            if (!this.signAccountOpController.accountOp.meta) {
+              this.signAccountOpController.accountOp.meta = {}
+            }
+            // We know #pendingWithdrawalParams is not null because we're inside the isWithdrawal check
+            const withdrawalParams = this.#pendingWithdrawalParams!
+            // @ts-ignore - Custom meta property for privacy pools withdrawal
+            this.signAccountOpController.accountOp.meta.withdrawalData = {
+              chainId: withdrawalParams.chainId,
+              poolAddress: withdrawalParams.poolAddress,
+              recipient: withdrawalParams.recipient,
+              totalAmount: withdrawalParams.totalAmount,
+              isPrivacyPoolsWithdrawal: true
+            }
           }
-          // @ts-ignore - Custom meta property for privacy pools withdrawal
-          this.signAccountOpController.accountOp.meta.withdrawalData = {
-            chainId: this.#pendingWithdrawalParams.chainId,
-            poolAddress: this.#pendingWithdrawalParams.poolAddress,
-            recipient: this.#pendingWithdrawalParams.recipient,
-            totalAmount: this.#pendingWithdrawalParams.totalAmount,
-            isPrivacyPoolsWithdrawal: true
-          }
+
+          // Emit update to notify listeners of the controller reuse
+          this.emitUpdate()
+          return
         }
 
-        return
+        // Controller exists but is unhealthy - destroy and recreate
+        // Only force provider recreation if there were errors (Helios might be in bad state)
+        const forceProviderRecreate = hasErrors || isInErrorState
+        console.log('DEBUG: Privacy Pools syncSignAccountOp: destroying unhealthy controller', { 
+          isWithdrawal, 
+          hasErrors, 
+          isInErrorState,
+          forceProviderRecreate 
+        })
+        this.destroySignAccountOp(forceProviderRecreate)
+        
+        // Small delay to ensure cleanup completes before creating new controller
+        // This prevents race conditions when user clicks back and immediately tries again
+        console.log('DEBUG: Privacy Pools syncSignAccountOp: waiting 100ms after destroy')
+        await wait(100)
+        console.log('DEBUG: Privacy Pools syncSignAccountOp: wait complete, controller should be null', {
+          controllerIsNull: this.signAccountOpController === null
+        })
       }
 
+      // Ensure hasProceeded is false when starting a new transaction
+      // (destroySignAccountOp should already do this, but be explicit)
+      this.hasProceeded = false
+      console.log('DEBUG: Privacy Pools syncSignAccountOp: calling #initSignAccOp', {
+        hasProceeded: this.hasProceeded,
+        controllerIsNull: this.signAccountOpController === null
+      })
+
       await this.#initSignAccOp(transactionCalls)
+      console.log('DEBUG: Privacy Pools syncSignAccountOp: #initSignAccOp completed', {
+        controllerExists: !!this.signAccountOpController
+      })
     } catch (error) {
+      console.error('DEBUG: Privacy Pools syncSignAccountOp error:', error)
+      // Ensure controller is destroyed on error to prevent stale error state
+      // Force provider recreation when there's an error (Helios might be in bad state)
+      if (this.signAccountOpController) {
+        this.destroySignAccountOp(true) // Force provider recreation on error
+      }
       this.emitError({
         level: 'major',
-        message: 'Failed to initialize transaction signing',
+        message: error instanceof Error ? error.message : 'Failed to initialize transaction signing',
         error: error instanceof Error ? error : new Error('Unknown error in syncSignAccountOp')
       })
     }
@@ -1336,6 +1521,18 @@ export class PrivacyPoolsController extends EventEmitter {
 
   get validationFormMsgs() {
     const validationFormMsgsNew = { ...DEFAULT_VALIDATION_FORM_MSGS }
+
+    // Validate that only native ETH is used for privacy pools
+    if (this.selectedToken) {
+      const isNativeToken = this.selectedToken.address === zeroAddress
+      if (!isNativeToken) {
+        validationFormMsgsNew.amount = {
+          success: false,
+          message: 'Only native ETH deposits for privacyPools'
+        }
+        return validationFormMsgsNew
+      }
+    }
 
     if (this.depositAmount && this.selectedToken && this.selectedToken.decimals) {
       try {

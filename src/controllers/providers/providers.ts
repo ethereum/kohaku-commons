@@ -69,6 +69,32 @@ export class ProvidersController extends EventEmitter {
     this.emitUpdate()
   }
 
+  /**
+   * Force recreate provider for a network - useful when provider gets into a bad state
+   * (e.g., Helios provider after RPC errors)
+   */
+  forceRecreateProvider(chainId: bigint) {
+    const network = this.#networks.networks.find((n) => n.chainId === chainId)
+    if (!network) {
+      console.warn(`DEBUG: ProvidersController forceRecreateProvider: network not found for chainId ${chainId}`)
+      return
+    }
+
+    const oldProvider = this.providers[chainId.toString()]
+    if (oldProvider) {
+      try {
+        console.log(`DEBUG: ProvidersController forceRecreateProvider: destroying old provider for chainId ${chainId}`)
+        oldProvider.destroy()
+      } catch (e) {
+        console.error(`DEBUG: ProvidersController forceRecreateProvider: error destroying old provider`, e)
+      }
+    }
+
+    console.log(`DEBUG: ProvidersController forceRecreateProvider: creating new provider for chainId ${chainId}`)
+    this.providers[chainId.toString()] = getRpcProvider(network)
+    this.emitUpdate()
+  }
+
   toJSON() {
     return {
       ...this,

@@ -19,6 +19,7 @@ import { randomId } from '../../libs/humanizer/utils'
 import { getPrivateKeyFromSeed } from '../../libs/keyIterator/keyIterator'
 import { HD_PATH_TEMPLATE_TYPE, BIP44_STANDARD_DERIVATION_TEMPLATE } from '../../consts/derivation'
 import { EstimationStatus } from '../estimation/types'
+import { SigningStatus } from '../signAccountOp/signAccountOp'
 import { validatePrivacyPoolsDepositAmount } from '../../services/privacyPools/validations'
 import { formatUnits } from 'viem'
 import wait from '../../utils/wait'
@@ -293,27 +294,55 @@ export class RailgunController extends EventEmitter {
   // EXISTING SIGN-ACCOUNT-OP STUFF (kept)
   // ─────────────────────────────────────────────
   async #initSignAccOp(calls: Call[]) {
-    if (!this.#selectedAccount?.account || this.signAccountOpController || !this.#accounts) return
+    console.log('DEBUG: Railgun #initSignAccOp called')
+    
+    if (!this.#selectedAccount?.account) {
+      console.error('DEBUG: Railgun #initSignAccOp failed: no selected account')
+      throw new Error('No selected account available for Railgun transaction')
+    }
+    
+    if (this.signAccountOpController) {
+      console.error('DEBUG: Railgun #initSignAccOp failed: controller already exists')
+      throw new Error('Sign account op controller already exists')
+    }
+    
+    if (!this.#accounts) {
+      console.error('DEBUG: Railgun #initSignAccOp failed: accounts controller not available')
+      throw new Error('Accounts controller not available')
+    }
 
     // NOTE: for now we hardcode Sepolia exactly like before
     const chainId = calls.length > 0 ? BigInt(11155111) : 11155111n
     const network = this.#networks.networks.find((net) => net.chainId === chainId)
-    if (!network) return
+    if (!network) {
+      console.error('DEBUG: Railgun #initSignAccOp failed: network not found for chainId', chainId)
+      throw new Error(`Network not found for chainId ${chainId}`)
+    }
 
     const provider = this.#providers.providers[network.chainId.toString()]
+    if (!provider) {
+      console.error('DEBUG: Railgun #initSignAccOp failed: provider not found for chainId', network.chainId)
+      throw new Error(`Provider not found for chainId ${network.chainId}`)
+    }
+    
     const accountState = await this.#accounts.getOrFetchAccountOnChainState(
       this.#selectedAccount.account.addr,
       network.chainId
     )
 
-    if (!this.#keystore) return
+    if (!this.#keystore) {
+      console.error('DEBUG: Railgun #initSignAccOp failed: keystore not available')
+      throw new Error('Keystore not available')
+    }
 
+    console.log('DEBUG: Railgun #initSignAccOp: creating base account')
     const baseAcc = getBaseAccount(
       this.#selectedAccount.account,
       accountState,
       this.#keystore.getAccountKeys(this.#selectedAccount.account),
       network
     )
+    console.log('DEBUG: Railgun #initSignAccOp: base account created')
 
     const accountOp: AccountOp = {
       accountAddr: this.#selectedAccount.account.addr,
@@ -330,23 +359,38 @@ export class RailgunController extends EventEmitter {
         paymasterService: getAmbirePaymasterService(baseAcc, this.#relayerUrl)
       }
     }
+    console.log('DEBUG: Railgun #initSignAccOp: accountOp created', {
+      accountAddr: accountOp.accountAddr,
+      chainId: accountOp.chainId.toString(),
+      nonce: accountOp.nonce?.toString(),
+      callsCount: accountOp.calls.length
+    })
 
-    this.signAccountOpController = new SignAccountOpController(
-      this.#accounts,
-      this.#networks,
-      this.#keystore,
-      this.#portfolio,
-      this.#activity,
-      this.#externalSignerControllers,
-      this.#selectedAccount.account,
-      network,
-      provider,
-      randomId(),
-      accountOp,
-      () => true,
-      false,
-      undefined
-    )
+    console.log('DEBUG: Railgun #initSignAccOp: creating SignAccountOpController')
+    try {
+      this.signAccountOpController = new SignAccountOpController(
+        this.#accounts,
+        this.#networks,
+        this.#keystore,
+        this.#portfolio,
+        this.#activity,
+        this.#externalSignerControllers,
+        this.#selectedAccount.account,
+        network,
+        provider,
+        randomId(),
+        accountOp,
+        () => true,
+        false,
+        undefined
+      )
+      console.log('DEBUG: Railgun #initSignAccOp: SignAccountOpController created', {
+        controllerId: this.signAccountOpController ? 'exists' : 'null'
+      })
+    } catch (e) {
+      console.error('DEBUG: Railgun #initSignAccOp: ERROR creating controller', e)
+      throw e
+    }
 
     this.#signAccountOpSubscriptions.push(
       this.signAccountOpController.onUpdate(() => {
@@ -361,30 +405,29 @@ export class RailgunController extends EventEmitter {
       })
     )
 
-    // Trigger immediate initial estimate
-    // The SignAccountOpController's #load() should start estimation automatically,
-    // but we ensure it happens immediately
-    if (this.signAccountOpController) {
-      // eslint-disable-next-line @typescript-eslint/no-floating-promises
-      this.signAccountOpController.estimate()
-    }
-
-    // Start the re-estimation loop for periodic updates
+    console.log('DEBUG: Railgun #initSignAccOp: starting reestimate')
     this.reestimate()
+    console.log('DEBUG: Railgun #initSignAccOp: COMPLETE')
   }
 
   async reestimate() {
-    if (!this.signAccountOpController || this.#reestimateAbortController) return
+    if (!this.signAccountOpController || this.#reestimateAbortController) {
+      return
+    }
 
     this.#reestimateAbortController = new AbortController()
     const signal = this.#reestimateAbortController!.signal
 
     const loop = async () => {
-      // First, wait 30 seconds before starting the loop
-      // eslint-disable-next-line no-await-in-loop
-      await wait(30000)
-      
+      // Trigger initial estimation immediately instead of waiting 30 seconds
+      if (this.signAccountOpController?.estimation.status !== EstimationStatus.Loading) {
+        // eslint-disable-next-line no-await-in-loop
+        await this.signAccountOpController?.estimate()
+      }
+
       while (!signal.aborted) {
+        // eslint-disable-next-line no-await-in-loop
+        await wait(30000)
         if (signal.aborted) break
 
         if (this.signAccountOpController?.estimation.status !== EstimationStatus.Loading) {
@@ -392,52 +435,114 @@ export class RailgunController extends EventEmitter {
           await this.signAccountOpController?.estimate()
         }
 
-        if (this.signAccountOpController?.estimation.errors.length) {
-          console.log(
-            'DEBUG: Errors on Railgun re-estimate',
-            this.signAccountOpController.estimation.errors
-          )
-        }
-
-        // Wait 30 seconds before next re-estimation
-        // eslint-disable-next-line no-await-in-loop
-        await wait(30000)
-        if (signal.aborted) break
+        // if (this.signAccountOpController?.estimation.errors.length) {
+        //   console.log(
+        //     'DEBUG: Errors on Railgun re-estimate',
+        //     this.signAccountOpController.estimation.errors
+        //   )
+        // }
       }
     }
 
-    void loop()
+    loop()
   }
 
   async syncSignAccountOp(calls?: Call[]) {
-    if (!this.#selectedAccount?.account) return
+    console.log('DEBUG: Railgun syncSignAccountOp called', { callsCount: calls?.length || 0 })
+    
+    if (!this.#selectedAccount?.account) {
+      console.error('DEBUG: Railgun syncSignAccountOp failed: no selected account')
+      this.emitError({
+        level: 'major',
+        message: 'No account selected. Please select an account and try again.',
+        error: new Error('No selected account available')
+      })
+      return
+    }
 
     const transactionCalls: Call[] = calls || []
-    if (!transactionCalls.length) return
+    if (!transactionCalls.length) {
+      console.error('DEBUG: Railgun syncSignAccountOp failed: no transaction calls provided')
+      this.emitError({
+        level: 'major',
+        message: 'No transaction calls provided',
+        error: new Error('Transaction calls array is empty')
+      })
+      return
+    }
 
     try {
       this.shouldTrackLatestBroadcastedAccountOp = true
 
-      // If a controller already exists, destroy it first to ensure clean state
-      // This prevents issues when starting a new transaction after a previous one
-      // The old controller might be in a stale state (e.g., still signing, estimating, etc.)
+      // If a controller already exists, try to reuse it if it's healthy
+      // This prevents unnecessary destruction/recreation which causes delays and errors
       if (this.signAccountOpController) {
-        // Destroy the old controller to start fresh
-        // This will also reset hasProceeded and clean up subscriptions/re-estimation loops
-        this.destroySignAccountOp()
+        // Check if controller is in an error state - if so, always destroy and recreate
+        const hasErrors = this.signAccountOpController.errors.length > 0
+        const isInErrorState = 
+          this.signAccountOpController.status?.type === SigningStatus.EstimationError ||
+          this.signAccountOpController.estimation.status === EstimationStatus.Error
+
+        // Try to reuse controller if it's healthy
+        if (!hasErrors && !isInErrorState) {
+          console.log('DEBUG: Railgun syncSignAccountOp: updating existing healthy controller')
+          
+          // Reset hasProceeded to ensure clean state when reusing controller
+          this.hasProceeded = false
+          
+          // Update the controller with new calls (update method handles if calls are same/different)
+          this.signAccountOpController.update({ calls: transactionCalls })
+
+          // Emit update to notify listeners of the controller reuse
+          this.emitUpdate()
+          return
+        }
+
+        // Controller exists but is unhealthy - destroy and recreate
+        // Only force provider recreation if there were errors (Helios might be in bad state)
+        const forceProviderRecreate = hasErrors || isInErrorState
+        console.log('DEBUG: Railgun syncSignAccountOp: destroying unhealthy controller', { 
+          hasErrors, 
+          isInErrorState,
+          forceProviderRecreate 
+        })
+        this.destroySignAccountOp(forceProviderRecreate)
+        
+        // Small delay to ensure cleanup completes before creating new controller
+        // This prevents race conditions when user clicks back and immediately tries again
+        console.log('DEBUG: Railgun syncSignAccountOp: waiting 100ms after destroy')
+        await wait(100)
+        console.log('DEBUG: Railgun syncSignAccountOp: wait complete, controller should be null', {
+          controllerIsNull: this.signAccountOpController === null
+        })
       }
 
       // Ensure hasProceeded is false when starting a new transaction
       // (destroySignAccountOp should already do this, but be explicit)
       this.hasProceeded = false
-
+      console.log('DEBUG: Railgun syncSignAccountOp: calling #initSignAccOp', {
+        hasProceeded: this.hasProceeded,
+        controllerIsNull: this.signAccountOpController === null
+      })
+      
       await this.#initSignAccOp(transactionCalls)
+      console.log('DEBUG: Railgun syncSignAccountOp: #initSignAccOp completed', {
+        controllerExists: !!this.signAccountOpController,
+        hasErrors: this.signAccountOpController ? this.signAccountOpController.errors.length > 0 : false,
+        estimationStatus: this.signAccountOpController?.estimation.status
+      })
     } catch (error) {
+      console.error('DEBUG: Railgun syncSignAccountOp error:', error)
       this.emitError({
         level: 'major',
-        message: 'Failed to initialize transaction signing',
+        message: error instanceof Error ? error.message : 'Failed to initialize transaction signing',
         error: error instanceof Error ? error : new Error('Unknown error in syncSignAccountOp')
       })
+      // Ensure controller is null on error
+      // Force provider recreation when there's an error (Helios might be in bad state)
+      if (this.signAccountOpController) {
+        this.destroySignAccountOp(true) // Force provider recreation on error
+      }
     }
   }
 
@@ -452,7 +557,32 @@ export class RailgunController extends EventEmitter {
     }
 
     if (typeof privacyProvider === 'string') {
+      const previousProvider = this.privacyProvider
       this.privacyProvider = privacyProvider
+      
+      // When switching providers, only destroy controller if it's in an error state
+      // The DepositScreen already handles destroying controllers when switching providers,
+      // so we only need to clean up unhealthy controllers here
+      if (previousProvider && previousProvider !== privacyProvider) {
+        console.log('DEBUG: Railgun provider changed', { previousProvider, newProvider: privacyProvider })
+        if (this.signAccountOpController) {
+          // Only destroy if controller is in an error state
+          const hasErrors = this.signAccountOpController.errors.length > 0
+          const isInErrorState = 
+            this.signAccountOpController.status?.type === SigningStatus.EstimationError ||
+            this.signAccountOpController.estimation.status === EstimationStatus.Error
+          
+          if (hasErrors || isInErrorState) {
+            console.log('DEBUG: Railgun provider changed: destroying unhealthy controller', { hasErrors, isInErrorState })
+            this.destroySignAccountOp(hasErrors || isInErrorState)
+          } else {
+            console.log('DEBUG: Railgun provider changed: keeping healthy controller for reuse')
+          }
+        }
+        // Explicitly reset hasProceeded when switching providers to ensure clean state
+        // This is critical when switching from another provider (e.g., Privacy Pools)
+        this.hasProceeded = false
+      }
     }
 
     if (typeof chainId === 'number') {
@@ -491,21 +621,74 @@ export class RailgunController extends EventEmitter {
     this.emitUpdate()
   }
 
-  destroySignAccountOp() {
-    this.#signAccountOpSubscriptions.forEach((unsubscribe) => unsubscribe())
+  destroySignAccountOp(forceProviderRecreate: boolean = false) {
+    console.log('DEBUG: Railgun destroySignAccountOp: START', {
+      hasController: !!this.signAccountOpController,
+      hasSubscriptions: this.#signAccountOpSubscriptions.length > 0,
+      hasReestimateAbort: !!this.#reestimateAbortController,
+      hasProceeded: this.hasProceeded,
+      forceProviderRecreate
+    })
+    
+    // Check if controller has errors - if so, force provider recreation
+    const hasErrors = (this.signAccountOpController?.errors.length ?? 0) > 0 || 
+                     this.signAccountOpController?.estimation.status === EstimationStatus.Error ||
+                     this.signAccountOpController?.status?.type === SigningStatus.EstimationError
+    
+    const shouldRecreateProvider = forceProviderRecreate || hasErrors
+    
+    this.#signAccountOpSubscriptions.forEach((unsubscribe) => {
+      try {
+        unsubscribe()
+      } catch (e) {
+        console.error('DEBUG: Railgun destroySignAccountOp: error unsubscribing', e)
+      }
+    })
     this.#signAccountOpSubscriptions = []
 
     if (this.#reestimateAbortController) {
-      this.#reestimateAbortController.abort()
+      try {
+        this.#reestimateAbortController.abort()
+      } catch (e) {
+        console.error('DEBUG: Railgun destroySignAccountOp: error aborting reestimate', e)
+      }
       this.#reestimateAbortController = null
     }
 
+    // Get chainId before destroying controller (for provider recreation)
+    const chainId = this.signAccountOpController?.accountOp?.chainId
+
     if (this.signAccountOpController) {
-      this.signAccountOpController.reset()
+      try {
+        console.log('DEBUG: Railgun destroySignAccountOp: resetting controller', {
+          status: this.signAccountOpController.status?.type,
+          estimationStatus: this.signAccountOpController.estimation.status,
+          hasErrors: this.signAccountOpController.errors.length > 0
+        })
+        this.signAccountOpController.reset()
+      } catch (e) {
+        console.error('DEBUG: Railgun destroySignAccountOp: error resetting controller', e)
+      }
       this.signAccountOpController = null
     }
 
+    // Force provider recreation if there were errors (Helios might be in bad state)
+    if (shouldRecreateProvider && chainId && this.#providers) {
+      console.log('DEBUG: Railgun destroySignAccountOp: forcing provider recreation due to errors', { chainId })
+      try {
+        this.#providers.forceRecreateProvider(chainId)
+      } catch (e) {
+        console.error('DEBUG: Railgun destroySignAccountOp: error recreating provider', e)
+      }
+    }
+
     this.hasProceeded = false
+    
+    console.log('DEBUG: Railgun destroySignAccountOp: COMPLETE', {
+      controllerIsNull: this.signAccountOpController === null,
+      hasProceeded: this.hasProceeded,
+      providerRecreated: shouldRecreateProvider
+    })
   }
 
   destroyLatestBroadcastedAccountOp() {
