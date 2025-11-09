@@ -7,6 +7,7 @@ import { EOA_SIMULATION_NONCE } from '../../consts/deployless'
 import { AccountOnchainState } from '../../interfaces/account'
 import { Network } from '../../interfaces/network'
 import { RPCProvider } from '../../interfaces/provider'
+import { BrowserProvider } from '../../services/provider/BrowserProvider'
 import { getEoaSimulationStateOverride } from '../../utils/simulationStateOverride'
 import { getAccountDeployParams } from '../account/account'
 import { BaseAccount } from '../account/BaseAccount'
@@ -56,7 +57,18 @@ export async function ambireEstimateGas(
   nativeToCheck: string[]
 ): Promise<AmbireEstimation | Error> {
   const account = baseAcc.getAccount()
-  const deploylessEstimator = fromDescriptor(provider, Estimation, !network.rpcNoStateOverride)
+
+  // Bypass Helios for estimations
+  // @TODO this should be removed when Helios supports state overrides
+  let estimationProvider = provider
+  if (provider instanceof BrowserProvider) {
+    estimationProvider = provider.getFallbackProvider()
+  }
+  const deploylessEstimator = fromDescriptor(
+    estimationProvider,
+    Estimation,
+    !network.rpcNoStateOverride
+  )
 
   // only the activator call is added here as there are cases where it's needed
   const calls = [...op.calls.map(toSingletonCall)]
