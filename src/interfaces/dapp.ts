@@ -9,6 +9,7 @@ export interface Dapp {
   isConnected: boolean
   chainId: number
   favorite: boolean
+  // Associated dapp account address
   account?: string
   blacklisted?: boolean
   grantedPermissionId?: string

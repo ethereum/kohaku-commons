@@ -707,6 +707,9 @@ export class MainController extends EventEmitter {
     this.forceEmitUpdate()
   }
 
+  /**
+   * Broadcasts an 'unlock' event to all connected dapps with each dapp's associated account.
+   */
   async handleBroadcastUnlock() {
     for (const session of Object.values(this.dapps.dappSessions)) {
       const dapp = this.dapps.getDapp(session.id)
@@ -714,11 +717,13 @@ export class MainController extends EventEmitter {
 
       const account = dapp.account
       if (!account) continue
-      console.log('Broadcasting unlock to dapp session', session.id, [account])
       await this.dapps.broadcastDappSessionEvent('unlock', [account], session.id)
     }
   }
 
+  /**
+   * Broadcasts an 'accountsChanged' event to all connected dapps with each dapp's associated account.
+   */
   async handleBroadcastAccountsChanged() {
     for (const session of Object.values(this.dapps.dappSessions)) {
       const dapp = this.dapps.getDapp(session.id)
@@ -726,7 +731,6 @@ export class MainController extends EventEmitter {
 
       const account = dapp.account
       if (!account) continue
-      console.log('Broadcasting unlock to dapp session', session.id, [account])
       await this.dapps.broadcastDappSessionEvent('accountsChanged', [account], session.id)
     }
   }

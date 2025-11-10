@@ -280,10 +280,8 @@ export class AccountsController extends EventEmitter {
   }
 
   async setAssociatedDapps(addr: string, dappUrls: string[]) {
-    console.log('Setting associated dapp URLs for account', addr, dappUrls)
     let dappIDs = dappUrls.map((url) => getDappIdFromUrl(url))
     dappIDs = Array.from(new Set(dappIDs))
-    console.log('Updated associatedDappIDs for account', addr, dappIDs)
     this.accounts = this.accounts.map((acc) => {
       if (acc.addr !== addr) return acc
       return { ...acc, associatedDappIDs: dappIDs }
