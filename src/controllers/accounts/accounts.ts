@@ -9,6 +9,7 @@ import {
 } from '../../interfaces/account'
 import { getUniqueAccountsArray } from '../../libs/account/account'
 import { getAccountState } from '../../libs/accountState/accountState'
+import { getDappIdFromUrl } from '../../libs/dapps/helpers'
 import EventEmitter, { Statuses } from '../eventEmitter/eventEmitter'
 import { KeystoreController } from '../keystore/keystore'
 import { NetworksController } from '../networks/networks'
@@ -273,6 +274,18 @@ export class AccountsController extends EventEmitter {
     updatedAccounts.splice(toIndex, 0, movedAccount)
 
     this.accounts = getUniqueAccountsArray(updatedAccounts)
+
+    this.emitUpdate()
+    await this.#storage.set('accounts', this.accounts)
+  }
+
+  async setAssociatedDapps(addr: string, dappUrls: string[]) {
+    let dappIDs = dappUrls.map((url) => getDappIdFromUrl(url))
+    dappIDs = Array.from(new Set(dappIDs))
+    this.accounts = this.accounts.map((acc) => {
+      if (acc.addr !== addr) return acc
+      return { ...acc, associatedDappIDs: dappIDs }
+    })
 
     this.emitUpdate()
     await this.#storage.set('accounts', this.accounts)

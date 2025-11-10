@@ -501,7 +501,7 @@ export class MainController extends EventEmitter {
             externalSignerControllers: this.#externalSignerControllers,
             relayerUrl,
             fetch: this.fetch,
-            onAddAccountsSuccessCallback: async () => {}
+            onAddAccountsSuccessCallback: async () => { }
           }),
           this.keystore,
           async () => {
@@ -625,7 +625,7 @@ export class MainController extends EventEmitter {
     this.isOffline = false
     // call closeActionWindow while still on the currently selected account to allow proper
     // state cleanup of the controllers like actionsCtrl, signAccountOpCtrl, signMessageCtrl...
-    if (this.requests.actions?.currentAction?.type !== 'switchAccount') {
+    if (this.requests.actions?.currentAction?.type !== 'switchAccount' && this.requests.actions?.currentAction?.type !== 'dappRequest') {
       await this.requests.actions.closeActionWindow()
     }
     const swapAndBridgeSigningAction = this.requests.actions.visibleActionsQueue.find(
@@ -637,7 +637,14 @@ export class MainController extends EventEmitter {
     await this.selectedAccount.setAccount(accountToSelect)
     this.swapAndBridge.reset()
     this.transfer.resetForm()
-    await this.dapps.broadcastDappSessionEvent('accountsChanged', [toAccountAddr])
+    // TODO: Decide if we want to use this func as a place where users can change
+    // their selected account for a particular dapp. Essentially - when the
+    // user changes the selected account in the wallet UI when on a dapp-connected
+    // site, should the UI allow that and change the dapp account (perhaps with a popup)
+    // or should we block that action? For now I'll block it and make it so that
+    // the user can change their selected account in the wallet, but the dapp
+    // will not be notified of that change unless the user reconnects the dapp.
+    await this.handleBroadcastAccountsChanged()
     // forceEmitUpdate to update the getters in the FE state of the ctrl
     await this.forceEmitUpdate()
     await this.requests.actions.forceEmitUpdate()
@@ -751,6 +758,34 @@ export class MainController extends EventEmitter {
     this.forceEmitUpdate()
   }
 
+  /**
+   * Broadcasts an 'unlock' event to all connected dapps with each dapp's associated account.
+   */
+  async handleBroadcastUnlock() {
+    for (const session of Object.values(this.dapps.dappSessions)) {
+      const dapp = this.dapps.getDapp(session.id)
+      if (!dapp) continue
+
+      const account = dapp.account
+      if (!account) continue
+      await this.dapps.broadcastDappSessionEvent('unlock', [account], session.id)
+    }
+  }
+
+  /**
+   * Broadcasts an 'accountsChanged' event to all connected dapps with each dapp's associated account.
+   */
+  async handleBroadcastAccountsChanged() {
+    for (const session of Object.values(this.dapps.dappSessions)) {
+      const dapp = this.dapps.getDapp(session.id)
+      if (!dapp) continue
+
+      const account = dapp.account
+      if (!account) continue
+      await this.dapps.broadcastDappSessionEvent('accountsChanged', [account], session.id)
+    }
+  }
+
   async handleSignAndBroadcastAccountOp(type: SignAccountOpType) {
     if (this.statuses.signAndBroadcastAccountOp !== 'INITIAL') {
       const message =
@@ -847,8 +882,7 @@ export class MainController extends EventEmitter {
             level: 'major',
             message:
               error.message ||
-              `Unknown error occurred while ${
-                !hasSigned ? 'signing the transaction' : 'broadcasting the transaction'
+              `Unknown error occurred while ${!hasSigned ? 'signing the transaction' : 'broadcasting the transaction'
               }`,
             error
           })
@@ -987,10 +1021,10 @@ export class MainController extends EventEmitter {
       const stateOverride =
         accountOp.calls.length > 1 && isBasicAccount(account, state)
           ? {
-              [account.addr]: {
-                code: AmbireAccount7702.binRuntime
-              }
+            [account.addr]: {
+              code: AmbireAccount7702.binRuntime
             }
+          }
           : undefined
       const { tokens, nfts } = await debugTraceCall(
         account,
@@ -1016,9 +1050,9 @@ export class MainController extends EventEmitter {
           [network],
           accountOpsForSimulation
             ? {
-                accountOps: accountOpsForSimulation,
-                states: await this.accounts.getOrFetchAccountStates(account.addr)
-              }
+              accountOps: accountOpsForSimulation,
+              states: await this.accounts.getOrFetchAccountStates(account.addr)
+            }
             : undefined,
           { forceUpdate: true }
         )
@@ -1392,9 +1426,9 @@ export class MainController extends EventEmitter {
       networks,
       accountOpsToBeSimulatedByNetwork
         ? {
-            accountOps: accountOpsToBeSimulatedByNetwork,
-            states: await this.accounts.getOrFetchAccountStates(this.selectedAccount.account.addr)
-          }
+          accountOps: accountOpsToBeSimulatedByNetwork,
+          states: await this.accounts.getOrFetchAccountStates(this.selectedAccount.account.addr)
+        }
         : undefined,
       { forceUpdate, maxDataAgeMs }
     )
@@ -1411,7 +1445,7 @@ export class MainController extends EventEmitter {
       const userRequestIndex = this.requests.userRequests.findIndex((r) => r.id === requestId)
       const userRequest = this.requests.userRequests[userRequestIndex] as SignUserRequest
       if (userRequest.action.kind === 'calls') {
-        ;(userRequest.action as Calls).calls = (userRequest.action as Calls).calls.filter(
+        ; (userRequest.action as Calls).calls = (userRequest.action as Calls).calls.filter(
           (c) => c.id !== callId
         )
 
@@ -2097,11 +2131,10 @@ export class MainController extends EventEmitter {
         submittedAccountOp.calls.length === accountOp.calls.length
           ? 'Done!'
           : 'Partially submitted',
-      message: `${
-        isBasicAccountBroadcastingMultiple
-          ? `${submittedAccountOp.calls.length}/${accountOp.calls.length} transactions were`
-          : 'The transaction was'
-      } successfully signed and broadcast to the network.`
+      message: `${isBasicAccountBroadcastingMultiple
+        ? `${submittedAccountOp.calls.length}/${accountOp.calls.length} transactions were`
+        : 'The transaction was'
+        } successfully signed and broadcast to the network.`
     })
 
     // reset the fee payer key
