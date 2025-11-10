@@ -24,8 +24,10 @@ import { EstimationStatus } from '../estimation/types'
 import { AccountsController } from '../accounts/accounts'
 import { ActivityController } from '../activity/activity'
 import { isValidAddress } from '../../services/address'
-import { validateSendTransferAddress } from '../../services/validations'
-import { validatePrivacyPoolsDepositAmount } from '../../services/privacyPools/validations'
+import {
+  validatePrivacyPoolsDepositAmount,
+  validateSendTransferAddress
+} from '../../services/privacyPools/validations'
 import { NetworksController } from '../networks/networks'
 import { PortfolioController } from '../portfolio/portfolio'
 import { ProvidersController } from '../providers/providers'

@@ -1,10 +1,82 @@
 import { formatUnits, parseUnits } from 'viem'
 import { getTokenAmount } from '../../libs/portfolio/helpers'
 import { getSanitizedAmount } from '../../libs/transfer/amount'
+import { isValidAddress } from '../address'
 
 type ValidateReturnType = {
   success: boolean
   message: string
+}
+
+const NOT_IN_ADDRESS_BOOK_MESSAGE =
+  "This address isn't in your Address Book. Double-check the details before confirming."
+
+export const validateSendTransferAddress = (
+  address: string,
+  selectedAcc: string,
+  addressConfirmed: any,
+  isRecipientAddressUnknown: boolean,
+  isRecipientHumanizerKnownTokenOrSmartContract: boolean,
+  isEnsAddress: boolean,
+  isRecipientDomainResolving: boolean,
+  isSWWarningVisible?: boolean,
+  isSWWarningAgreed?: boolean
+): ValidateReturnType => {
+  // Basic validation is handled in the AddressInput component and we don't want to overwrite it.
+  if (!isValidAddress(address) || isRecipientDomainResolving) {
+    return {
+      success: true,
+      message: ''
+    }
+  }
+
+  // Commented out to allow sending to the same address for private Send
+  // if (selectedAcc && address.toLowerCase() === selectedAcc.toLowerCase()) {
+  //   return {
+  //     success: false,
+  //     message: "You can't send to the same address you're sending from."
+  //   }
+  // }
+
+  if (isRecipientHumanizerKnownTokenOrSmartContract) {
+    return {
+      success: false,
+      message: 'You are trying to send tokens to a smart contract. Doing so would burn them.'
+    }
+  }
+
+  if (
+    isRecipientAddressUnknown &&
+    !addressConfirmed &&
+    !isEnsAddress &&
+    !isRecipientDomainResolving
+  ) {
+    return {
+      success: false,
+      message: NOT_IN_ADDRESS_BOOK_MESSAGE
+    }
+  }
+
+  if (
+    isRecipientAddressUnknown &&
+    !addressConfirmed &&
+    isEnsAddress &&
+    !isRecipientDomainResolving
+  ) {
+    return {
+      success: false,
+      message: NOT_IN_ADDRESS_BOOK_MESSAGE
+    }
+  }
+
+  if (isRecipientAddressUnknown && addressConfirmed && isSWWarningVisible && !isSWWarningAgreed) {
+    return {
+      success: false,
+      message: 'Please confirm that the recipient address is not an exchange.'
+    }
+  }
+
+  return { success: true, message: '' }
 }
 
 /**
