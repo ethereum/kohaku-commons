@@ -1,7 +1,13 @@
 import { Network } from '../interfaces/network'
 import { PIMLICO } from './bundlers'
 
-const ALCHEMY_API_KEY = process.env.REACT_APP_ALCHEMY_API_KEY
+const SEPOLIA_RPC_URL = process.env.SEPOLIA_RPC_URL
+const USE_HELIOS = process.env.USE_HELIOS
+const HELIOS_CHECKPOINT = process.env.HELIOS_CHECKPOINT
+
+if (!SEPOLIA_RPC_URL) {
+  throw new Error('SEPOLIA_RPC_URL is not set')
+}
 
 const testnetNetworks: Network[] = [
   {
@@ -9,8 +15,8 @@ const testnetNetworks: Network[] = [
     nativeAssetSymbol: 'ETH',
     has7702: false,
     nativeAssetName: 'Ether',
-    rpcUrls: [`https://eth-sepolia.g.alchemy.com/v2/${ALCHEMY_API_KEY}`],
-    selectedRpcUrl: `https://eth-sepolia.g.alchemy.com/v2/${ALCHEMY_API_KEY}`,
+    rpcUrls: [SEPOLIA_RPC_URL || ''],
+    selectedRpcUrl: SEPOLIA_RPC_URL || '',
     consensusRpcUrl: 'http://unstable.sepolia.beacon-api.nimbus.team/',
     rpcNoStateOverride: true,
     chainId: 11155111n,
@@ -32,8 +38,8 @@ const testnetNetworks: Network[] = [
     features: [],
     feeOptions: { is1559: true },
     predefined: true,
-    useHelios: true,
-    heliosCheckpoint: '0x5ba822735c5060e34516eab195b1a84af6b6e830f95dca276812354994f70245'
+    useHelios: USE_HELIOS === 'true',
+    heliosCheckpoint: HELIOS_CHECKPOINT || '0x5ba822735c5060e34516eab195b1a84af6b6e830f95dca276812354994f70245'
   }
   // {
   //   name: 'Base Sepolia',

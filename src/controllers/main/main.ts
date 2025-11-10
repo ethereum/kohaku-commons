@@ -220,7 +220,6 @@ export class MainController extends EventEmitter {
     privacyPoolsRelayerUrl,
     railgunRelayerUrl,
     alchemyApiKey,
-    infuraApiKey,
     hypersyncApiKey,
     featureFlags,
     swapApiKey,
@@ -238,7 +237,6 @@ export class MainController extends EventEmitter {
     privacyPoolsRelayerUrl: string
     railgunRelayerUrl: string
     alchemyApiKey: string
-    infuraApiKey: string
     hypersyncApiKey: string
     featureFlags: Partial<FeatureFlags>
     swapApiKey: string
@@ -538,8 +536,7 @@ export class MainController extends EventEmitter {
       this.activity,
       this.storage,
       this.#externalSignerControllers,
-      railgunRelayerUrl,
-      infuraApiKey
+      railgunRelayerUrl
     )
   }
 

@@ -82,7 +82,6 @@ export class RailgunController extends EventEmitter {
   #activity: ActivityController
   #externalSignerControllers: ExternalSignerControllers
   #relayerUrl: string
-  infuraApiKey: string
 
   #signAccountOpSubscriptions: Function[] = []
   #reestimateAbortController: AbortController | null = null
@@ -130,8 +129,7 @@ export class RailgunController extends EventEmitter {
     activity: ActivityController,
     storage: StorageController,
     externalSignerControllers: ExternalSignerControllers,
-    relayerUrl: string,
-    infuraApiKey: string
+    relayerUrl: string
   ) {
     super()
 
@@ -145,7 +143,6 @@ export class RailgunController extends EventEmitter {
     this.#storage = storage
     this.#externalSignerControllers = externalSignerControllers
     this.#relayerUrl = relayerUrl
-    this.infuraApiKey = infuraApiKey
 
     // old behaviour – we wait for selectedAccount to finish loading
     this.#initialPromise = this.#load()
@@ -598,7 +595,6 @@ export class RailgunController extends EventEmitter {
       chainId: this.chainId,
       depositAmount: this.depositAmount,
       privacyProvider: this.privacyProvider,
-      infuraApiKey: this.infuraApiKey,
       defaultRailgunKeys: this.defaultRailgunKeys,
       derivedRailgunKeysByIndex: this.derivedRailgunKeysByIndex,
       lastFetchedRailgunAccountCache: this.lastFetchedRailgunAccountCache,

@@ -1,7 +1,7 @@
 import { type Address, parseEther } from 'viem'
 import { type Chain, sepolia } from 'viem/chains'
 
-const ALCHEMY_API_KEY = process.env.REACT_APP_ALCHEMY_API_KEY
+const ALCHEMY_API_KEY = process.env.ALCHEMY_API_KEY
 
 // Add chains to the whitelist to be used in the app
 const testnetChains: readonly [Chain, ...Chain[]] = [sepolia]
