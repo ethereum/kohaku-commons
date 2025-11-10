@@ -186,7 +186,7 @@ export const mapRelayerNetworkConfigToAmbireNetwork = (
 
   // Always fallback to these values for the "predefined" networks, coming from
   // the RPC for the custom networks.
-  const rpcNoStateOverride = false
+  const rpcNoStateOverride = true // @TODO Revert when overrides are supported in Helios
   const isSAEnabled = !!smartAccounts
   const areContractsDeployed = !!smartAccounts
   const features: NetworkFeature[] = []

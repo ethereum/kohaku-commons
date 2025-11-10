@@ -41,11 +41,11 @@ const avalanche = networks.find((x) => x.chainId === 43114n)!
 avalanche.areContractsDeployed = true
 const polygon = networks.find((x) => x.chainId === 137n)
 if (!ethereum || !optimism || !arbitrum || !avalanche || !polygon) throw new Error('no network')
-const provider = getRpcProvider(ethereum.rpcUrls, ethereum.chainId)
-const providerOptimism = getRpcProvider(optimism.rpcUrls, optimism.chainId)
-const providerArbitrum = getRpcProvider(arbitrum.rpcUrls, arbitrum.chainId)
+const provider = getRpcProvider(ethereum)
+const providerOptimism = getRpcProvider(optimism)
+const providerArbitrum = getRpcProvider(arbitrum)
 // const providerAvalanche = getRpcProvider(avalanche.rpcUrls, avalanche.chainId)
-const providerPolygon = getRpcProvider(polygon.rpcUrls, polygon.chainId)
+const providerPolygon = getRpcProvider(polygon)
 const addrWithDeploySignature = '0x52C37FD54BD02E9240e8558e28b11e0Dc22d8e85'
 const errorCallback = () => {}
 
@@ -220,7 +220,7 @@ const feeTokens = [
 const portfolio = new Portfolio(fetch, provider, ethereum, velcroUrl)
 
 const providers = Object.fromEntries(
-  networks.map((network) => [network.chainId, getRpcProvider(network.rpcUrls, network.chainId)])
+  networks.map((network) => [network.chainId, getRpcProvider(network)])
 )
 const getAccountsInfo = async (accounts: Account[]): Promise<AccountStates> => {
   const result = await Promise.all(

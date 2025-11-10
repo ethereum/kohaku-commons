@@ -1,25 +1,22 @@
 import { JsonRpcProvider, Network } from 'ethers'
 
-import { Network as NetworkInterface } from '../../interfaces/network'
+import { BrowserProvider } from './BrowserProvider'
+import { Network as NetworkConfig } from '../../interfaces/network'
+import { HeliosEthersProvider } from './HeliosEthersProvider'
 
-interface ProviderOptions {
-  batchMaxCount: number
+export type MinNetworkConfig = Partial<NetworkConfig> & {
+  rpcUrls: string[]
 }
 
-const getRpcProvider = (
-  rpcUrls: NetworkInterface['rpcUrls'],
-  chainId?: bigint | number,
-  selectedRpcUrl?: string,
-  options?: ProviderOptions
-) => {
-  if (!rpcUrls.length) {
+const getRpcProvider = (config: MinNetworkConfig, forceBypassHelios: boolean = false) => {
+  if (!config.rpcUrls.length) {
     throw new Error('rpcUrls must be a non-empty array')
   }
 
-  let rpcUrl = rpcUrls[0]
+  let rpcUrl = config.rpcUrls[0]
 
-  if (selectedRpcUrl) {
-    const prefUrl = rpcUrls.find((u) => u === selectedRpcUrl)
+  if (config.selectedRpcUrl) {
+    const prefUrl = config.rpcUrls.find((u) => u === config.selectedRpcUrl)
     if (prefUrl) rpcUrl = prefUrl
   }
 
@@ -27,15 +24,26 @@ const getRpcProvider = (
     throw new Error('Invalid RPC URL provided')
   }
 
-  if (chainId) {
-    const staticNetwork = Network.from(Number(chainId))
+  let staticNetwork: Network | undefined
 
-    if (staticNetwork) {
-      return new JsonRpcProvider(rpcUrl, staticNetwork, { staticNetwork, ...options })
-    }
+  if (config.chainId) {
+    staticNetwork = Network.from(Number(config.chainId))
   }
 
-  return new JsonRpcProvider(rpcUrl)
+  if (config.useHelios && !forceBypassHelios) {
+    if (!staticNetwork) {
+      const advice = config.chainId === undefined ? ' (likely fix: specify chainId)' : ''
+
+      throw new Error(`Cannot use Helios without staticNetwork${advice}`)
+    }
+    const heliosProvider = new HeliosEthersProvider(config, rpcUrl, staticNetwork)
+    return new BrowserProvider(heliosProvider, rpcUrl)
+  }
+
+  return new JsonRpcProvider(rpcUrl, staticNetwork, {
+    staticNetwork,
+    batchMaxCount: config.batchMaxCount
+  })
 }
 
 export { getRpcProvider }

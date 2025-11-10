@@ -62,6 +62,7 @@ export interface Network {
   rpcUrls: string[]
   explorerUrl: string
   selectedRpcUrl: string
+  consensusRpcUrl?: string
   erc4337: NetworkInfo['erc4337']
   rpcNoStateOverride: NetworkInfo['rpcNoStateOverride']
   feeOptions: NetworkInfo['feeOptions']
@@ -74,6 +75,7 @@ export interface Network {
   nativeAssetId: NetworkInfo['nativeAssetId']
   iconUrls?: string[]
   isOptimistic?: NetworkInfo['isOptimistic']
+  isLinea?: boolean
   flagged?: NetworkInfo['flagged']
   predefined: boolean
   wrappedAddr?: string
@@ -86,6 +88,9 @@ export interface Network {
   has7702: boolean
   allowForce4337?: boolean
   disabled?: boolean
+  batchMaxCount?: number
+  useHelios?: boolean
+  heliosCheckpoint?: string
 }
 
 export interface AddNetworkRequestParams {

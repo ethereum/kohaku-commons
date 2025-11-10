@@ -12,7 +12,7 @@ export class Biconomy extends Bundler {
   }
 
   protected async getGasPrice(network: Network): Promise<GasSpeeds> {
-    const provider = this.getProvider(network)
+    const provider = this.getProvider(network, true)
     const prices: any = await provider.send('biconomy_getGasFeeValues', [])
     prices.medium = prices.standard
     prices.ape = prices.fast
@@ -21,7 +21,7 @@ export class Biconomy extends Bundler {
   }
 
   public async getStatus(network: Network, userOpHash: string): Promise<UserOpStatus> {
-    const provider = this.getProvider(network)
+    const provider = this.getProvider(network, true)
     const result = await provider
       .send('biconomy_getUserOperationStatus', [userOpHash])
       .catch((e) => {

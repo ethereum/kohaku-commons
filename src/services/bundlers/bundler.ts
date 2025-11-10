@@ -59,8 +59,8 @@ export abstract class Bundler {
    *
    * @param network
    */
-  protected getProvider(network: Network): RPCProvider {
-    return getRpcProvider([this.getUrl(network)], network.chainId)
+  protected getProvider(network: Network, forceBypassHelios: boolean = false): RPCProvider {
+    return getRpcProvider({ ...network, rpcUrls: [this.getUrl(network)] }, forceBypassHelios)
   }
 
   private async sendEstimateReq(
@@ -68,7 +68,7 @@ export abstract class Bundler {
     network: Network,
     stateOverride?: BundlerStateOverride
   ): Promise<BundlerEstimateResult> {
-    const provider = this.getProvider(network)
+    const provider = this.getProvider(network, true)
     return stateOverride
       ? provider.send('eth_estimateUserOperationGas', [
           getCleanUserOp(userOperation)[0],
@@ -122,7 +122,7 @@ export abstract class Bundler {
    * @returns Receipt | null
    */
   async getReceipt(userOperationHash: string, network: Network) {
-    const provider = this.getProvider(network)
+    const provider = this.getProvider(network, true)
     return provider.send('eth_getUserOperationReceipt', [userOperationHash])
   }
 
@@ -133,7 +133,7 @@ export abstract class Bundler {
    * @returns userOperationHash
    */
   async broadcast(userOperation: UserOperation, network: Network): Promise<string> {
-    const provider = this.getProvider(network)
+    const provider = this.getProvider(network, true)
     return provider.send('eth_sendUserOperation', [
       getCleanUserOp(userOperation)[0],
       ERC_4337_ENTRYPOINT

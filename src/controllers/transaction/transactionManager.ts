@@ -36,7 +36,7 @@ export class TransactionManagerController extends EventEmitter {
   private registerControllerUpdates(): void {
     this.#controllers.forEach((controller) => {
       controller.onUpdate(async () => {
-        if (controller.toJSON().name === 'TransactionFormState') {
+        if ((controller.toJSON() as unknown as Record<string, unknown>).name === 'TransactionFormState') {
           try {
             await this.handleFormUpdate()
           } catch (error: any) {

@@ -92,7 +92,7 @@ describe('Bundler estimation tests', () => {
       }
       const usedNetworks = [optimism]
       const providers = {
-        [optimism.chainId.toString()]: getRpcProvider(optimism.rpcUrls, optimism.chainId)
+        [optimism.chainId.toString()]: getRpcProvider(optimism)
       }
       const accountStates = await getAccountsInfo(usedNetworks, providers, [smartAcc])
 
@@ -154,7 +154,7 @@ describe('Bundler estimation tests', () => {
       }
       const usedNetworks = [optimism]
       const providers = {
-        [optimism.chainId.toString()]: getRpcProvider(optimism.rpcUrls, optimism.chainId)
+        [optimism.chainId.toString()]: getRpcProvider(optimism)
       }
       const accountStates = await getAccountsInfo(usedNetworks, providers, [smartAccDeployed])
 
@@ -213,7 +213,7 @@ describe('Bundler estimation tests', () => {
       }
       const usedNetworks = [optimism]
       const providers = {
-        [optimism.chainId.toString()]: getRpcProvider(optimism.rpcUrls, optimism.chainId)
+        [optimism.chainId.toString()]: getRpcProvider(optimism)
       }
       const accountStates = await getAccountsInfo(usedNetworks, providers, [smartAccDeployed])
 
@@ -290,7 +290,7 @@ describe('Bundler fallback tests', () => {
     }
     const usedNetworks = [base]
     const providers = {
-      [base.chainId.toString()]: getRpcProvider(base.rpcUrls, base.chainId)
+      [base.chainId.toString()]: getRpcProvider(base)
     }
     const accountStates = await getAccountsInfo(usedNetworks, providers, [smartAccDeployed])
 

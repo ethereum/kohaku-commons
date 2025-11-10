@@ -1,6 +1,6 @@
 export type CallbackOptions = {
   /** The sender of the message. */
-  sender: chrome.runtime.MessageSender
+  sender: unknown /* chrome.runtime.MessageSender */
   /** The topic provided. */
   topic: string
   /** An optional scoped identifier. */

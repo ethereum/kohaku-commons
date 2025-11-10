@@ -49,11 +49,7 @@ export class ProvidersController extends EventEmitter {
         // no need to do anything; try/catch is just in case a double destroy is attempted
       }
 
-      this.providers[network.chainId.toString()] = getRpcProvider(
-        network.rpcUrls,
-        network.chainId,
-        network.selectedRpcUrl
-      )
+      this.providers[network.chainId.toString()] = getRpcProvider(network)
     }
   }
 

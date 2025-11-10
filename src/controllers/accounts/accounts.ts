@@ -312,8 +312,9 @@ export class AccountsController extends EventEmitter {
     this.emitUpdate()
   }
 
+  // Switched to 'latest' instead of 'pending' because a light client can't fetch the pending state.
   async forceFetchPendingState(addr: string, chainId: bigint): Promise<AccountOnchainState> {
-    await this.updateAccountState(addr, 'pending', [chainId])
+    await this.updateAccountState(addr, 'latest', [chainId])
     return this.accountStates[addr][chainId.toString()]
   }
 

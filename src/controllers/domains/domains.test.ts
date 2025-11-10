@@ -5,7 +5,7 @@ import { getRpcProvider } from '../../services/provider'
 import { DomainsController } from './domains'
 
 const providers = Object.fromEntries(
-  networks.map((network) => [network.chainId, getRpcProvider(network.rpcUrls, network.chainId)])
+  networks.map((network) => [network.chainId, getRpcProvider(network)])
 )
 
 const ENS = {

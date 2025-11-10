@@ -57,7 +57,10 @@ export function getPaymasterStubData(
   userOp: UserOperation,
   network: Network
 ): Promise<PaymasterEstimationData> {
-  const provider = getRpcProvider([service.url], network.chainId)
+  const provider = getRpcProvider({
+    rpcUrls: [service.url],
+    chainId: network.chainId
+  })
   return provider.send('pm_getPaymasterStubData', [
     getCleanUserOp(userOp)[0],
     ERC_4337_ENTRYPOINT,
@@ -71,7 +74,10 @@ export async function getPaymasterData(
   userOp: UserOperation,
   network: Network
 ): Promise<PaymasterData> {
-  const provider = getRpcProvider([service.url], network.chainId)
+  const provider = getRpcProvider({
+    rpcUrls: [service.url],
+    chainId: network.chainId
+  })
   // TODO<Bobby>: better way to send the bundler
   // send the whole userOp if the sponsorship is from ambire.com
   // so we could fetch the bundler used

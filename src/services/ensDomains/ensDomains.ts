@@ -5,9 +5,9 @@ import { isAddress } from 'ethers'
 // @ts-ignore
 import { normalize } from '@ensdomains/eth-ens-namehash'
 
-import { networks } from '../../consts/networks'
+import { testnetNetworks as networks } from '../../consts/testnetNetworks'
 import { RPCProvider } from '../../interfaces/provider'
-import { getRpcProvider } from '../provider'
+import { getRpcProvider, MinNetworkConfig } from '../provider'
 
 const BIP44_BASE_VALUE = 2147483648
 const ADDRESS_ZERO = '0x0000000000000000000000000000000000000000'
@@ -38,11 +38,17 @@ export function isCorrectAddress(address: string) {
 }
 
 // @TODO: Get RPC provider url from settings controller
-async function resolveENSDomain(domain: string, bip44Item?: number[][]): Promise<string> {
+async function resolveENSDomain(
+  domain: string,
+  bip44Item?: number[][],
+  providerFactoryOverride?: (network: MinNetworkConfig) => RPCProvider
+): Promise<string> {
   const normalizedDomainName = normalizeDomain(domain)
   if (!normalizedDomainName) return ''
-  const ethereum = networks.find((n) => n.chainId === 1n)!
-  const provider = getRpcProvider(ethereum.rpcUrls, ethereum.chainId)
+  const ethereum = networks.find((n) => n.chainId === 11155111n)!
+  const provider = providerFactoryOverride
+    ? providerFactoryOverride(ethereum)
+    : getRpcProvider(ethereum)
   const resolver = await provider.getResolver(normalizedDomainName)
   if (!resolver) return ''
   try {

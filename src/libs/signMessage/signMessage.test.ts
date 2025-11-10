@@ -116,7 +116,7 @@ const v1Account: Account = {
 }
 
 const providers = Object.fromEntries(
-  networks.map((network) => [network.chainId, getRpcProvider(network.rpcUrls, network.chainId)])
+  networks.map((network) => [network.chainId, getRpcProvider(network)])
 )
 
 const getAccountsInfo = async (accounts: Account[]): Promise<AccountStates> => {
@@ -187,7 +187,7 @@ describe('Sign Message, Keystore with key dedicatedToOneSA: true ', () => {
       accountStates[eoaAccount.addr][ethereumNetwork.chainId.toString()],
       signer
     )
-    const provider = getRpcProvider(ethereumNetwork.rpcUrls, ethereumNetwork.chainId)
+    const provider = getRpcProvider(ethereumNetwork)
     const firstRes = await verifyMessage({
       network: ethereumNetwork,
       provider,
@@ -243,7 +243,7 @@ describe('Sign Message, Keystore with key dedicatedToOneSA: true ', () => {
     // the key should be dedicatedToOneSA, so we expect the signature to end in 00
     expect(signatureForPlainText.slice(-2)).toEqual('00')
 
-    const provider = getRpcProvider(polygonNetwork.rpcUrls, polygonNetwork.chainId)
+    const provider = getRpcProvider(polygonNetwork)
     const res = await verifyMessage({
       network: polygonNetwork,
       provider,
@@ -272,7 +272,7 @@ describe('Sign Message, Keystore with key dedicatedToOneSA: true ', () => {
     // the key should be 00 because it's a v1 account
     expect(signatureForPlainText.slice(-2)).toEqual('00')
 
-    const provider = getRpcProvider(polygonNetwork.rpcUrls, polygonNetwork.chainId)
+    const provider = getRpcProvider(polygonNetwork)
     const res = await verifyMessage({
       network: polygonNetwork,
       provider,
@@ -345,7 +345,7 @@ describe('Sign Message, Keystore with key dedicatedToOneSA: true ', () => {
       accountState.accountAddr,
       hashMessage('test')
     )
-    const provider = getRpcProvider(ethereumNetwork.rpcUrls, ethereumNetwork.chainId)
+    const provider = getRpcProvider(ethereumNetwork)
     const eip712Sig = await getEIP712Signature(
       typedDataTest,
       eoaAccount,
@@ -600,7 +600,7 @@ describe('Sign Message, Keystore with key dedicatedToOneSA: true ', () => {
       },
       primaryType: 'BulkOrder'
     }
-    const provider = getRpcProvider(ethereumNetwork.rpcUrls, ethereumNetwork.chainId)
+    const provider = getRpcProvider(ethereumNetwork)
     const eip712Sig = await getEIP712Signature(
       typedDataTest,
       eoaAccount,
@@ -637,7 +637,7 @@ describe('Sign Message, Keystore with key dedicatedToOneSA: true ', () => {
     // the key should be dedicatedToOneSA, so we expect the signature to end in 00
     expect(eip712Sig.slice(-2)).toEqual('00')
 
-    const provider = getRpcProvider(polygonNetwork.rpcUrls, polygonNetwork.chainId)
+    const provider = getRpcProvider(polygonNetwork)
     const res = await verifyMessage({
       network: polygonNetwork,
       provider,
@@ -677,7 +677,7 @@ describe('Sign Message, Keystore with key dedicatedToOneSA: true ', () => {
     // the key is for a v1 acc so it should be 00
     expect(eip712Sig.slice(-2)).toEqual('00')
 
-    const provider = getRpcProvider(polygonNetwork.rpcUrls, polygonNetwork.chainId)
+    const provider = getRpcProvider(polygonNetwork)
     const res = await verifyMessage({
       network: ethereumNetwork,
       provider,
@@ -705,7 +705,7 @@ describe('Sign Message, Keystore with key dedicatedToOneSA: true ', () => {
     // the key is for a v1 acc so it should be 00
     expect(eip712Sig.slice(-2)).toEqual('00')
 
-    const provider = getRpcProvider(polygonNetwork.rpcUrls, polygonNetwork.chainId)
+    const provider = getRpcProvider(polygonNetwork)
     const res = await verifyMessage({
       network: ethereumNetwork,
       provider,
@@ -769,7 +769,7 @@ describe('Sign Message, Keystore with key dedicatedToOneSA: true ', () => {
 
     expect(eip712Sig.slice(-2)).toEqual('02')
 
-    const provider = getRpcProvider(polygonNetwork.rpcUrls, polygonNetwork.chainId)
+    const provider = getRpcProvider(polygonNetwork)
 
     // v2 account
     const contractV2 = new Contract(v2SmartAccAddr, AmbireAccount.abi, provider)
@@ -806,7 +806,7 @@ describe('Sign Message, Keystore with key dedicatedToOneSA: true ', () => {
     )
     expect(eip712Sig.slice(-2)).toEqual('00')
 
-    const provider = getRpcProvider(polygonNetwork.rpcUrls, polygonNetwork.chainId)
+    const provider = getRpcProvider(polygonNetwork)
     const wrappedSig = wrapWallet(eip712Sig, smartAccount.addr)
 
     // verify message should pass
@@ -833,7 +833,7 @@ describe('Sign Message, Keystore with key dedicatedToOneSA: true ', () => {
     )
     expect(signatureForPlainText.slice(-2)).toEqual('00')
 
-    const provider = getRpcProvider(polygonNetwork.rpcUrls, polygonNetwork.chainId)
+    const provider = getRpcProvider(polygonNetwork)
     const wrappedSig = wrapWallet(signatureForPlainText, smartAccount.addr)
 
     const res = await verifyMessage({
@@ -879,7 +879,7 @@ describe('Sign Message, Keystore with key dedicatedToOneSA: true ', () => {
 
     const authorizationHash = getAuthorizationHash(1n, EIP_7702_AMBIRE_ACCOUNT, 0n)
     const signature = signer.sign7702(authorizationHash)
-    const provider = getRpcProvider(ethereumNetwork.rpcUrls, ethereumNetwork.chainId)
+    const provider = getRpcProvider(ethereumNetwork)
     const authorizationRes = await verifyMessage({
       network: ethereumNetwork,
       provider,
@@ -950,7 +950,7 @@ describe('Sign Message, Keystore with key dedicatedToOneSA: false', () => {
     // the key should not be dedicatedToOneSA, so we expect the signature to end in 01
     expect(signatureForPlainText.slice(-2)).toEqual('01')
 
-    const provider = getRpcProvider(polygonNetwork.rpcUrls, polygonNetwork.chainId)
+    const provider = getRpcProvider(polygonNetwork)
     const contract = new Contract(smartAccount.addr, AmbireAccount.abi, provider)
     const isValidSig = await contract.isValidSignature(hashMessage('test'), signatureForPlainText)
     expect(isValidSig).toBe(contractSuccess)

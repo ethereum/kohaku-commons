@@ -110,7 +110,7 @@ export async function getNetworkInfo(
   }
 
   let flagged = false
-  const provider = getRpcProvider([rpcUrl], chainId)
+  const provider = getRpcProvider({ rpcUrls: [rpcUrl], chainId })
 
   const raiseFlagged = (e: Error, returnData: any): any => {
     if (e.message === 'flagged') {

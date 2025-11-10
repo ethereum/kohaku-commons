@@ -11,7 +11,7 @@ export class Pimlico extends Bundler {
   }
 
   protected async getGasPrice(network: Network): Promise<GasSpeeds> {
-    const provider = this.getProvider(network)
+    const provider = this.getProvider(network, true)
     const prices: any = await provider.send('pimlico_getUserOperationGasPrice', [])
     prices.medium = prices.standard
     prices.ape = prices.fast
@@ -20,7 +20,7 @@ export class Pimlico extends Bundler {
   }
 
   public async getStatus(network: Network, userOpHash: string): Promise<UserOpStatus> {
-    const provider = this.getProvider(network)
+    const provider = this.getProvider(network, true)
     return provider.send('pimlico_getUserOperationStatus', [userOpHash])
   }
 

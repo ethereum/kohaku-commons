@@ -45,12 +45,7 @@ export async function estimateGas(
     .catch(async (e) => {
       if (!e.message.includes('insufficient funds')) return 0n
 
-      const isolatedProvider = getRpcProvider(
-        network.rpcUrls,
-        network.chainId,
-        network.selectedRpcUrl,
-        { batchMaxCount: 1 }
-      )
+      const isolatedProvider = getRpcProvider({ ...network, batchMaxCount: 1 }, true)
       const withOverrides = await isolatedProvider
         .send('eth_estimateGas', [
           {

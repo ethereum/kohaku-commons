@@ -20,7 +20,7 @@ import { getAccountState } from './accountState'
 
 const polygon = networks.find((n) => n.chainId === 137n)
 if (!polygon) throw new Error('unable to find polygon network in consts')
-const provider = getRpcProvider(polygon.rpcUrls, polygon.chainId)
+const provider = getRpcProvider(polygon)
 
 describe('AccountState', () => {
   test('should get the account state and check if a v1 address and v2 address (not deployed) are returned correctly', async () => {
@@ -215,7 +215,7 @@ describe('AccountState', () => {
       platformId: 'odyssey',
       has7702: true
     }
-    const odysseyProvider = getRpcProvider(odyssey.rpcUrls, odyssey.chainId)
+    const odysseyProvider = getRpcProvider(odyssey)
     const state = await getAccountState(odysseyProvider, odyssey, [account7702])
 
     expect(state.length).toBe(1)

@@ -1,4 +1,4 @@
-import { BaseContract, getBytes, hexlify, JsonRpcProvider } from 'ethers'
+import { BaseContract, getBytes, hexlify } from 'ethers'
 import { ethers } from 'hardhat'
 import secp256k1 from 'secp256k1'
 
@@ -7,7 +7,7 @@ import { Account, AccountStates } from '../src/interfaces/account'
 import { Hex } from '../src/interfaces/hex'
 import { Key } from '../src/interfaces/keystore'
 import { Network } from '../src/interfaces/network'
-import { RPCProviders } from '../src/interfaces/provider'
+import { RPCProvider, RPCProviders } from '../src/interfaces/provider'
 import { Storage } from '../src/interfaces/storage'
 import { isSmartAccount } from '../src/libs/account/account'
 import { getAccountState } from '../src/libs/accountState/accountState'
@@ -58,7 +58,7 @@ function getTimelockData(recoveryInfo = defaultRecoveryInfo) {
   return { hash, timelockAddress }
 }
 
-async function getNonce(ambireAccountAddr: string, provider: JsonRpcProvider) {
+async function getNonce(ambireAccountAddr: string, provider: RPCProvider) {
   const accountContract = new ethers.Contract(ambireAccountAddr, AmbireAccount.abi, provider)
   return accountContract.nonce()
 }

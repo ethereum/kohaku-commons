@@ -21,7 +21,7 @@ import { StrippedExternalHintsAPIResponse } from './interfaces'
 import { Portfolio } from './portfolio'
 
 const providers = Object.fromEntries(
-  networks.map((network) => [network.chainId, getRpcProvider(network.rpcUrls, network.chainId)])
+  networks.map((network) => [network.chainId, getRpcProvider(network)])
 )
 const getAccountsInfo = async (accounts: Account[]): Promise<AccountStates> => {
   const result = await Promise.all(
@@ -50,8 +50,14 @@ describe('Portfolio', () => {
   if (!ethereum) throw new Error('unable to find ethereum network in consts')
   if (!arbitrum) throw new Error('unable to find arbitrum network in consts')
 
-  const provider = getRpcProvider(['https://invictus.ambire.com/ethereum'], 1n)
-  const providerArbitrum = getRpcProvider(['https://invictus.ambire.com/arbitrum'], 42161n)
+  const provider = getRpcProvider({
+    rpcUrls: ['https://invictus.ambire.com/ethereum'],
+    chainId: 1n
+  })
+  const providerArbitrum = getRpcProvider({
+    rpcUrls: ['https://invictus.ambire.com/arbitrum'],
+    chainId: 42161n
+  })
 
   const portfolio = new Portfolio(fetch, provider, ethereum, velcroUrl)
   const portfolioArbitrum = new Portfolio(fetch, providerArbitrum, arbitrum, velcroUrl)

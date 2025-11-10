@@ -10,9 +10,11 @@
     "jest": "node runTests.js",
     "build": "tsc src/libs/deployless/deployless.ts -t es5",
     "prettier": "prettier --write 'contracts/**/*.sol'",
-    "lint:fix": "eslint ./src/** --ext .js,.jsx,.ts,.tsx --fix"
+    "lint:fix": "eslint ./src/** --ext .js,.jsx,.ts,.tsx --fix",
+    "check": "tsc --noEmit && echo 'FIXME: eslint is disabled here because there are too many issues.'"
   },
   "dependencies": {
+    "@a16z/helios": "0.10.2",
     "@lifi/types": "^17.7.1",
     "@metamask/eth-sig-util": "^8.2.0",
     "aes-js": "^3.1.2",
@@ -64,6 +66,7 @@
     "@types/mocha": "^10.0.1",
     "@types/node": "^18.16.1",
     "@types/node-fetch": "^2.6.11",
+    "@types/react": "^18.1.0",
     "@types/ungap__structured-clone": "^1.2.0",
     "@types/validator": "^13.7.0",
     "@typescript-eslint/eslint-plugin": "5.5.0",

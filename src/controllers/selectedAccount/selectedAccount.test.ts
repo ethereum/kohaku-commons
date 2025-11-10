@@ -24,7 +24,7 @@ import { StorageController } from '../storage/storage'
 import { DEFAULT_SELECTED_ACCOUNT_PORTFOLIO, SelectedAccountController } from './selectedAccount'
 
 const providers = Object.fromEntries(
-  networks.map((network) => [network.chainId, getRpcProvider(network.rpcUrls, network.chainId)])
+  networks.map((network) => [network.chainId, getRpcProvider(network)])
 )
 
 const storage: Storage = produceMemoryStore()
