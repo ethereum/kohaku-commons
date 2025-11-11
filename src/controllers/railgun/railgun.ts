@@ -277,10 +277,12 @@ export class RailgunController extends EventEmitter {
     const key = this.#getRailgunCacheKey(zkAddress, chainId);
     await this.#storage.set(key, cache);
   
+    // Store the cache in lastFetchedRailgunAccountCache so UI can use it without another fetch
+    // This avoids timeout issues and race conditions
     this.lastFetchedRailgunAccountCache = {
       zkAddress,
       chainId,
-      cache: null, // NOTE IMPORTANT: avoid big payload!
+      cache: cache, // Store the cache payload - UI can use it directly
       fetchedAt: Date.now()
     };
 
