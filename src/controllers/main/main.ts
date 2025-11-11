@@ -536,7 +536,8 @@ export class MainController extends EventEmitter {
       this.activity,
       this.storage,
       this.#externalSignerControllers,
-      railgunRelayerUrl
+      railgunRelayerUrl,
+      this.fetch
     )
   }
 

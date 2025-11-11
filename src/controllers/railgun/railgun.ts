@@ -20,8 +20,12 @@ import { getPrivateKeyFromSeed } from '../../libs/keyIterator/keyIterator'
 import { HD_PATH_TEMPLATE_TYPE, BIP44_STANDARD_DERIVATION_TEMPLATE } from '../../consts/derivation'
 import { EstimationStatus } from '../estimation/types'
 import { validatePrivacyPoolsDepositAmount } from '../../services/privacyPools/validations'
-import { formatUnits } from 'viem'
+import { formatUnits, parseUnits } from 'viem'
 import wait from '../../utils/wait'
+import { relayerCall } from '../../libs/relayerCall/relayerCall'
+import { Fetch } from '../../interfaces/fetch'
+import { AccountOpStatus } from '../../libs/accountOp/types'
+import { SubmittedAccountOp } from '../../libs/accountOp/submittedAccountOp'
 
 interface RailgunFormUpdate {
   depositAmount?: string
@@ -82,6 +86,8 @@ export class RailgunController extends EventEmitter {
   #activity: ActivityController
   #externalSignerControllers: ExternalSignerControllers
   #relayerUrl: string
+  #fetch: Fetch
+  #callRelayer: Function
 
   #signAccountOpSubscriptions: Function[] = []
   #reestimateAbortController: AbortController | null = null
@@ -129,7 +135,8 @@ export class RailgunController extends EventEmitter {
     activity: ActivityController,
     storage: StorageController,
     externalSignerControllers: ExternalSignerControllers,
-    relayerUrl: string
+    relayerUrl: string,
+    fetch: Fetch
   ) {
     super()
 
@@ -143,6 +150,10 @@ export class RailgunController extends EventEmitter {
     this.#storage = storage
     this.#externalSignerControllers = externalSignerControllers
     this.#relayerUrl = relayerUrl
+    this.#fetch = fetch
+
+    // Bind relayer call function
+    this.#callRelayer = relayerCall.bind({ url: relayerUrl, fetch })
 
     // old behaviour – we wait for selectedAccount to finish loading
     this.#initialPromise = this.#load()
@@ -581,6 +592,190 @@ export class RailgunController extends EventEmitter {
     // TODO: handle withdrawal validation when implement withdrawals
 
     return validationFormMsgsNew
+  }
+
+  // ─────────────────────────────────────────────
+  // WITHDRAWAL SUBMISSION (via relayer)
+  // ─────────────────────────────────────────────
+  async directBroadcastWithdrawal(params: {
+    to: string
+    data: string
+    value: string
+    chainId: number
+  }) {
+    if (!this.#selectedAccount?.account) {
+      throw new Error('No account selected')
+    }
+
+    // IMMEDIATELY set latestBroadcastedAccountOp to show loading screen
+    // This allows the UI to transition to the track screen right away
+    this.latestBroadcastedAccountOp = {
+      accountAddr: this.#selectedAccount.account.addr,
+      chainId: BigInt(params.chainId),
+      signingKeyAddr: null,
+      signingKeyType: null,
+      gasLimit: null,
+      gasFeePayment: null,
+      nonce: 0n,
+      signature: '0x' as `0x${string}`, // Temporary placeholder, will be updated with actual txId
+      accountOpToExecuteBefore: null,
+      calls: [],
+      // @ts-ignore - Custom properties for railgun withdrawal tracking
+      status: AccountOpStatus.BroadcastedButNotConfirmed,
+      // @ts-ignore
+      txnId: null, // Will be updated after relayer response
+      // @ts-ignore
+      identifiedBy: 'userOp',
+      meta: {
+        // @ts-ignore - Custom meta properties for railgun withdrawal
+        txnId: null, // Will be updated after relayer response
+        // @ts-ignore
+        isRailgunWithdrawal: true
+      }
+    }
+
+    // Store the token for tracking page display
+    this.latestBroadcastedToken = this.selectedToken
+
+    // CRITICAL: Set shouldTrackLatestBroadcastedAccountOp to true BEFORE emitUpdate
+    // This ensures the UI knows to show the tracking screen immediately
+    this.shouldTrackLatestBroadcastedAccountOp = true
+
+    this.emitUpdate()
+
+    try {
+      // Call the relayer /forward endpoint
+      const response = await this.#callRelayer('/forward', 'POST', {
+        to: params.to,
+        data: params.data,
+        value: "0x0"
+      }, {
+        'Content-Type': 'application/json'
+      })
+      console.log('DEBUG: Response from relayer:', JSON.stringify(response, null, 2));
+
+      // The relayerCall may wrap the response in a 'data' field or spread it directly
+      // Check both response.data and response directly for the API response
+      const apiResponse = response.data || response
+      
+      // Try multiple possible field names for status and transaction hash
+      const apiStatus = apiResponse.status || apiResponse.Status || apiResponse.state
+      const txHash = apiResponse.tx_hash || apiResponse.txHash || apiResponse.transactionHash || apiResponse.transaction_hash || apiResponse.hash || apiResponse.txId || apiResponse.txnId
+
+      console.log('DEBUG: Parsed response - status:', apiStatus, 'txHash:', txHash);
+
+      // Handle response based on status
+      if (apiStatus === 'FAILURE' || apiStatus === 'failure' || apiStatus === 'failed') {
+        if (this.latestBroadcastedAccountOp) {
+          this.latestBroadcastedAccountOp = {
+            ...this.latestBroadcastedAccountOp,
+            // @ts-ignore
+            status: AccountOpStatus.Failure
+          }
+          this.emitUpdate()
+        }
+        throw new Error('Transaction submission failed')
+      }
+
+      // If we have a transaction hash, treat it as success even if status is not explicitly 'SUCCESS'
+      // This handles cases where the relayer returns the hash directly without a status field
+      if (txHash) {
+        const submittedAccountOp: SubmittedAccountOp = {
+          accountAddr: this.#selectedAccount.account!.addr,
+          chainId: BigInt(params.chainId),
+          signingKeyAddr: null,
+          signingKeyType: null,
+          gasLimit: null,
+          gasFeePayment: null,
+          nonce: 0n,
+          signature: txHash as `0x${string}`,
+          accountOpToExecuteBefore: null,
+          calls: [],
+          status: AccountOpStatus.BroadcastedButNotConfirmed,
+          txnId: txHash,
+          identifiedBy: {
+            type: 'Relayer',
+            identifier: txHash
+          },
+          timestamp: new Date().getTime(),
+          meta: {
+            // @ts-ignore
+            isRailgunWithdrawal: true
+          }
+        }
+
+        await this.#activity.addAccountOp(submittedAccountOp)
+
+        this.latestBroadcastedAccountOp = submittedAccountOp
+
+        this.emitUpdate()
+
+        // Immediately check transaction receipt to update status if available
+        // This provides immediate feedback to the user instead of waiting for the periodic status update
+        const network = this.#networks.networks.find((net) => net.chainId === BigInt(params.chainId))
+        if (network) {
+          const provider = this.#providers.providers[network.chainId.toString()]
+          if (provider) {
+            // Check receipt in background - don't await to avoid blocking
+            provider
+              .getTransactionReceipt(txHash)
+              .then((receipt) => {
+                if (receipt) {
+                  const isSuccess = !!receipt.status
+                  const newStatus = isSuccess ? AccountOpStatus.Success : AccountOpStatus.Failure
+
+                  // Update activity controller
+                  if (this.#selectedAccount?.account) {
+                    this.#activity
+                      .updateAccountOpStatus(
+                        this.#selectedAccount.account.addr,
+                        BigInt(params.chainId),
+                        txHash,
+                        newStatus
+                      )
+                      .then(() => {
+                        // Update local tracking
+                        if (this.latestBroadcastedAccountOp) {
+                          this.latestBroadcastedAccountOp = {
+                            ...this.latestBroadcastedAccountOp,
+                            // @ts-ignore
+                            status: newStatus
+                          }
+                          this.emitUpdate()
+                        }
+                      })
+                      .catch((error) => {
+                        console.error('Error updating accountOp status:', error)
+                      })
+                  }
+                }
+              })
+              .catch((error) => {
+                // Receipt not available yet - that's fine, the periodic status update will handle it
+                console.log('Transaction receipt not available yet, will be checked by periodic update')
+              })
+          }
+        }
+      } else if (apiStatus === 'SUCCESS' || apiStatus === 'success') {
+        // Status is SUCCESS but no txHash - this shouldn't happen, but handle gracefully
+        throw new Error('Transaction submitted successfully but no transaction hash returned')
+      } else {
+        // No status and no txHash - log the full response for debugging
+        console.error('DEBUG: Invalid response structure. Full response:', JSON.stringify(response, null, 2))
+        throw new Error(`Invalid response from relayer: missing status and transaction hash. Response: ${JSON.stringify(response)}`)
+      }
+    } catch (error) {
+      console.error('Error submitting withdrawal to relayer:', error)
+      if (this.latestBroadcastedAccountOp) {
+        this.latestBroadcastedAccountOp = {
+          ...this.latestBroadcastedAccountOp,
+          // @ts-ignore
+          status: AccountOpStatus.Failure
+        }
+        this.emitUpdate()
+      }
+      throw error
+    }
   }
 
   // ─────────────────────────────────────────────
