@@ -602,6 +602,7 @@ export class RailgunController extends EventEmitter {
     data: string
     value: string
     chainId: number
+    isInternalTransfer?: boolean
   }) {
     if (!this.#selectedAccount?.account) {
       throw new Error('No account selected')
@@ -630,7 +631,9 @@ export class RailgunController extends EventEmitter {
         // @ts-ignore - Custom meta properties for railgun withdrawal
         txnId: null, // Will be updated after relayer response
         // @ts-ignore
-        isRailgunWithdrawal: true
+        isRailgunWithdrawal: true,
+        // @ts-ignore
+        isRailgunInternalTransfer: params.isInternalTransfer || false
       }
     }
 
@@ -700,7 +703,9 @@ export class RailgunController extends EventEmitter {
           timestamp: new Date().getTime(),
           meta: {
             // @ts-ignore
-            isRailgunWithdrawal: true
+            isRailgunWithdrawal: true,
+            // @ts-ignore
+            isRailgunInternalTransfer: params.isInternalTransfer || false
           }
         }
 
