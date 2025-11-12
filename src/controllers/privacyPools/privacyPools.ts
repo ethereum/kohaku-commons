@@ -24,8 +24,10 @@ import { EstimationStatus } from '../estimation/types'
 import { AccountsController } from '../accounts/accounts'
 import { ActivityController } from '../activity/activity'
 import { isValidAddress } from '../../services/address'
-import { validateSendTransferAddress } from '../../services/validations'
-import { validatePrivacyPoolsDepositAmount } from '../../services/privacyPools/validations'
+import {
+  validatePrivacyPoolsDepositAmount,
+  validateSendTransferAddress
+} from '../../services/privacyPools/validations'
 import { NetworksController } from '../networks/networks'
 import { PortfolioController } from '../portfolio/portfolio'
 import { ProvidersController } from '../providers/providers'
@@ -330,12 +332,12 @@ export class PrivacyPoolsController extends EventEmitter {
     // Step 1: Derive dedicated address and wallet
     const coinType = 9001
     const privacyPoolsPath = `m/44'/${coinType}'/0'/0/0`
-    console.log('DEBUG: PRIVACY POOLS: GET SEED PHRASE');
+    console.log('DEBUG: PRIVACY POOLS: GET SEED PHRASE')
     const seedPhrase = await this.#getCurrentAccountSeed()
     if (!seedPhrase) {
       throw new Error('No seed phrase available for key derivation')
     } else {
-      console.log('DEBUG: PRIVACY POOLS: SEED PHRASE FOUND');
+      console.log('DEBUG: PRIVACY POOLS: SEED PHRASE FOUND')
     }
 
     const mnemonic = Mnemonic.fromPhrase(seedPhrase)
@@ -541,7 +543,7 @@ export class PrivacyPoolsController extends EventEmitter {
     batchSize,
     currentPrivateBalance
   }: PrivacyPoolsFormUpdate) {
-    console.log('DEBUG: PRIVACY POOLS FORM UPDATE CONTROLLER UPDATE');
+    console.log('DEBUG: PRIVACY POOLS FORM UPDATE CONTROLLER UPDATE')
     let shouldUpdateQuote = false
 
     if (typeof depositAmount === 'string') {
