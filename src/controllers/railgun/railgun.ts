@@ -608,6 +608,12 @@ export class RailgunController extends EventEmitter {
       throw new Error('No account selected')
     }
 
+    // Clear any old transaction state before starting a new transaction
+    // This ensures old "Private Transfer Done!" states don't persist when starting a new withdrawal
+    this.latestBroadcastedAccountOp = null
+    this.latestBroadcastedToken = null
+    this.emitUpdate()
+
     // IMMEDIATELY set latestBroadcastedAccountOp to show loading screen
     // This allows the UI to transition to the track screen right away
     this.latestBroadcastedAccountOp = {
