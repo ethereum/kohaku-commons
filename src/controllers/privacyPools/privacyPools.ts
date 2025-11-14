@@ -42,6 +42,7 @@ import { Fetch } from '../../interfaces/fetch'
 import { generateUuid } from '../../utils/uuid'
 import wait from '../../utils/wait'
 import { SubmittedAccountOp } from '../../libs/accountOp/submittedAccountOp'
+import { sepolia, mainnet } from 'viem/chains'
 
 const HARD_CODED_CURRENCY = 'usd'
 
@@ -259,6 +260,7 @@ export class PrivacyPoolsController extends EventEmitter {
   ) {
     super()
 
+
     this.#keystore = keystore
     this.#accounts = accounts
     this.#selectedAccount = selectedAccount
@@ -278,6 +280,7 @@ export class PrivacyPoolsController extends EventEmitter {
 
     // Bind relayer call function
     this.#callRelayer = relayerCall.bind({ url: privacyPoolsRelayerUrl, fetch })
+    this.chainDataByWhitelistedChains = [chainData[mainnet.id], chainData[sepolia.id]]
 
     this.#initialPromise = this.#load()
 
@@ -394,7 +397,8 @@ export class PrivacyPoolsController extends EventEmitter {
   async #initSignAccOp(calls: Call[]) {
     if (!this.#selectedAccount?.account || this.signAccountOpController || !this.#accounts) return
     // Use the network from the first call to determine the chainId
-    const chainId = calls.length > 0 ? BigInt(11155111) : 11155111n // Default to Sepolia for now
+    // TODO: For mainnet
+    const chainId = 1n; // calls.length > 0 ? BigInt(11155111) : 11155111n // Default to Sepolia for now
     const network = this.#networks.networks.find((net) => net.chainId === chainId)
 
     if (!network) return
@@ -634,8 +638,7 @@ export class PrivacyPoolsController extends EventEmitter {
 
       // Fetch relayer details
       const detailsResponse = await this.#fetch(
-        `${this.#privacyPoolsRelayerUrl}/relayer/details?chainId=${
-          selectedPoolInfo.chainId
+        `${this.#privacyPoolsRelayerUrl}/relayer/details?chainId=${selectedPoolInfo.chainId
         }&assetAddress=0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE`
       )
 
