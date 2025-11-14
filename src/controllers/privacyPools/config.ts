@@ -1,10 +1,10 @@
 import { type Address, parseEther } from 'viem'
-import { type Chain, sepolia } from 'viem/chains'
+import { type Chain, sepolia, mainnet } from 'viem/chains'
 
 const ALCHEMY_API_KEY = process.env.REACT_APP_ALCHEMY_API_KEY
 
 // Add chains to the whitelist to be used in the app
-const testnetChains: readonly [Chain, ...Chain[]] = [sepolia]
+const testnetChains: readonly [Chain, ...Chain[]] = [mainnet, sepolia]
 
 export const whitelistedChains = testnetChains
 
@@ -48,6 +48,38 @@ export interface ChainData {
 }
 
 const testnetChainData: ChainData = {
+  // Mainnet
+  [mainnet.id]: {
+    name: mainnet.name,
+    symbol: mainnet.nativeCurrency.symbol,
+    decimals: mainnet.nativeCurrency.decimals,
+    image: '',
+    explorerUrl: mainnet.blockExplorers.default.url,
+    sdkRpcUrl: '', // TODO: change to sdk mainnet
+    rpcUrl: '', // TODO: change to sdk mainnet
+    aspUrl: 'https://api.0xbow.io',
+    relayers: [
+      { name: 'Mainnet Relay', url: 'https://relayer-staging-149184580131.us-east1.run.app' },
+      { name: 'Freedom Relay', url: 'https://fastrelay.xyz' }
+    ],
+    poolInfo: [
+      {
+        chainId: mainnet.id,
+        assetAddress: '0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE',
+        address: '0xf241d57c6debae225c0f2e6ea1529373c9a9c9fb',
+        scope: 4916574638117198869413701114161172350986437430914933850166949084132905299523n,
+        deploymentBlock: 20760862n,
+        entryPointAddress: '0x6818809EefCe719E480a7526D76bD3e561526b46',
+        maxDeposit: parseEther('10'),
+        minDeposit: parseEther('0.1'),
+        minWithdrawal: parseEther('0.01'),
+        asset: 'ETH',
+        assetDecimals: 18,
+        icon: '',
+        isStableAsset: false
+      }
+    ]
+  },
   // Testnets
   [sepolia.id]: {
     name: sepolia.name,
@@ -58,7 +90,7 @@ const testnetChainData: ChainData = {
     // sdkRpcUrl: `/api/hypersync-rpc?chainId=11155111`, // Secure Hypersync proxy (relative URL)
     sdkRpcUrl: 'https://sepolia.rpc.hypersync.xyz/',
     rpcUrl: 'https://eth-sepolia.g.alchemy.com/v2/',
-    aspUrl: '',
+    aspUrl: 'https://dw.0xbow.io',
     relayers: [
       { name: 'Testnet Relay', url: 'https://testnet-relayer.privacypools.com' },
       { name: 'Freedom Relay', url: 'https://fastrelay.xyz' }
