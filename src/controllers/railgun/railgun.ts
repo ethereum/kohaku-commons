@@ -491,7 +491,11 @@ export class RailgunController extends EventEmitter {
     this.amountFieldMode = 'token'
     this.isRecipientAddressUnknown = false
     this.isRecipientAddressUnknownAgreed = false
-    this.latestBroadcastedToken = null
+    // Don't clear latestBroadcastedToken when tracking is active (shouldDestroyAccountOp = false)
+    // This allows the completion screen to show the correct token symbol
+    if (shouldDestroyAccountOp) {
+      this.latestBroadcastedToken = null
+    }
     this.programmaticUpdateCounter = 0
     this.#isInitialized = false
 
@@ -806,7 +810,9 @@ export class RailgunController extends EventEmitter {
       defaultRailgunKeys: this.defaultRailgunKeys,
       derivedRailgunKeysByIndex: this.derivedRailgunKeysByIndex,
       lastFetchedRailgunAccountCache: this.lastFetchedRailgunAccountCache,
-      validationFormMsgs: this.validationFormMsgs
+      validationFormMsgs: this.validationFormMsgs,
+      latestBroadcastedToken: this.latestBroadcastedToken,
+      latestBroadcastedAccountOp: this.latestBroadcastedAccountOp
     }
   }
 }

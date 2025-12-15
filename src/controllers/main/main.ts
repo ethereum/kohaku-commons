@@ -2114,6 +2114,7 @@ export class MainController extends EventEmitter {
 
     if (type === SIGN_ACCOUNT_OP_RAILGUN) {
       if (this.railgun.shouldTrackLatestBroadcastedAccountOp) {
+        this.railgun.latestBroadcastedToken = this.railgun.selectedToken
         this.railgun.latestBroadcastedAccountOp = submittedAccountOp
       }
 

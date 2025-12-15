@@ -71,11 +71,14 @@ export async function getEstimation(
   )
 
   // this is only if we hit a timeout 5 consecutive times
-  if (estimations instanceof Error) return estimations
+  if (estimations instanceof Error) {
+    return estimations
+  }
 
   const ambireGas = estimations[0]
   const bundlerGas = estimations[1]
   const providerGas = estimations[2]
+
   const fullEstimation: FullEstimation = {
     provider: providerGas,
     ambire: ambireGas,
@@ -84,12 +87,15 @@ export async function getEstimation(
   }
 
   const criticalError = baseAcc.getEstimationCriticalError(fullEstimation, op)
-  if (criticalError) return criticalError
+  if (criticalError) {
+    return criticalError
+  }
 
   let flags = {}
   if (!(ambireGas instanceof Error) && ambireGas) flags = { ...ambireGas.flags }
   if (!(bundlerGas instanceof Error) && bundlerGas) flags = { ...bundlerGas.flags }
   fullEstimation.flags = flags
+
   return fullEstimation
 }
 
