@@ -135,6 +135,14 @@ export class Deployless {
   }
 
   async call(methodName: string, args: any[], opts: Partial<CallOptions> = {}): Promise<any> {
+    console.log('[Deployless.call] START', {
+      methodName,
+      mode: opts.mode,
+      hasStateToOverride: opts.stateToOverride !== null,
+      stateOverrideSupported: this.stateOverrideSupported,
+      contractRuntimeCodeDefined: this.contractRuntimeCode !== undefined
+    })
+
     opts = { ...defaultOptions, ...opts }
     const forceProxy = opts.mode === DeploylessMode.ProxyContract
 
@@ -146,21 +154,44 @@ export class Deployless {
       !forceProxy &&
       this.contractRuntimeCode === undefined
     ) {
+      console.log('[Deployless.call] Starting state override detection')
       this.detectionPromise = this.detectStateOverride()
     }
-    await this.detectionPromise
+    if (this.detectionPromise) {
+      console.log('[Deployless.call] Waiting for detection promise')
+      await this.detectionPromise
+      console.log('[Deployless.call] Detection completed', {
+        stateOverrideSupported: this.stateOverrideSupported
+      })
+    }
 
     if (opts.stateToOverride !== null && opts.mode !== DeploylessMode.StateOverride) {
+      console.error('[Deployless.call] State override passed but not requested')
       throw new Error('state override passed but not requested')
     }
     if (opts.mode === DeploylessMode.StateOverride && !this.stateOverrideSupported) {
+      console.error('[Deployless.call] State override requested but not supported', {
+        methodName,
+        stateOverrideSupported: this.stateOverrideSupported
+      })
       throw new Error(`${methodName}: state override requested but not supported`)
     }
 
     const callData = this.iface.encodeFunctionData(methodName, args)
     const toAddr = opts.to ?? arbitraryAddr
+    const useStateOverride = !!this.stateOverrideSupported && !forceProxy
+    
+    console.log('[Deployless.call] Making RPC call', {
+      useStateOverride,
+      forceProxy,
+      mode: opts.mode,
+      blockTag: opts.blockTag,
+      from: opts.from,
+      toAddr
+    })
+
     const callPromise =
-      !!this.stateOverrideSupported && !forceProxy
+      useStateOverride
         ? (this.provider as JsonRpcProvider).send('eth_call', [
             {
               to: toAddr,
@@ -199,8 +230,45 @@ export class Deployless {
       })
     ])
 
-    const returnDataRaw = mapResponse(await mapError(callPromisedWithResolveTimeout))
-    return this.iface.decodeFunctionResult(methodName, returnDataRaw)
+    try {
+      console.log('[Deployless.call] Waiting for RPC response')
+      const returnDataRaw = mapResponse(await mapError(callPromisedWithResolveTimeout))
+      console.log('[Deployless.call] RPC call succeeded', {
+        returnDataLength: returnDataRaw?.length,
+        returnDataPreview: returnDataRaw?.substring(0, 100),
+        isEmpty: returnDataRaw === '0x' || returnDataRaw?.length <= 2
+      })
+      
+      // Check for empty data - this can happen if the RPC doesn't support state override
+      // but we tried to use it anyway
+      if (!returnDataRaw || returnDataRaw === '0x' || returnDataRaw.length <= 2) {
+        console.error('[Deployless.call] RPC returned empty data', {
+          methodName,
+          mode: opts.mode,
+          useStateOverride,
+          stateOverrideSupported: this.stateOverrideSupported
+        })
+        throw new Error(`${methodName}: RPC returned empty data (likely state override not supported)`)
+      }
+      
+      const result = this.iface.decodeFunctionResult(methodName, returnDataRaw)
+      console.log('[Deployless.call] SUCCESS - Decoded result', {
+        resultType: Array.isArray(result) ? 'array' : typeof result,
+        resultLength: Array.isArray(result) ? result.length : undefined
+      })
+      return result
+    } catch (error: any) {
+      console.error('[Deployless.call] RPC call failed', {
+        errorMessage: error?.message,
+        errorName: error?.name,
+        errorCode: error?.code,
+        errorString: String(error),
+        hasData: !!error?.data,
+        hasRevert: !!error?.revert,
+        errorStack: error?.stack
+      })
+      throw error
+    }
   }
 }
 
@@ -219,14 +287,39 @@ export function fromDescriptor(
 
 async function mapError(callPromise: Promise<string>): Promise<string> {
   try {
-    return await callPromise
+    const result = await callPromise
+    console.log('[Deployless.mapError] RPC call succeeded', {
+      resultLength: result?.length,
+      resultPreview: result?.substring(0, 100)
+    })
+    return result
   } catch (e: any) {
+    console.error('[Deployless.mapError] RPC call error caught', {
+      errorCode: e?.code,
+      errorMessage: e?.message,
+      errorName: e?.name,
+      hasErrorData: !!e?.error?.data,
+      hasData: !!e?.data,
+      errorString: String(e),
+      errorKeys: e ? Object.keys(e) : []
+    })
+
     // ethers v5 provider: e.error.data is usually our eth_call output in case of execution reverted
-    if (e.error && e.error.data) return e.error.data
+    if (e.error && e.error.data) {
+      console.log('[Deployless.mapError] Returning error.data (ethers v5)')
+      return e.error.data
+    }
     // ethers v5 provider: unwrap the wrapping that ethers adds to this type of error in case of provider.call
-    if (e.code === 'CALL_EXCEPTION' && e.error) throw e.error
+    if (e.code === 'CALL_EXCEPTION' && e.error) {
+      console.log('[Deployless.mapError] Throwing unwrapped error (ethers v5)')
+      throw e.error
+    }
     // ethers v6 provider: wrapping the error in case of execution reverted
-    if (e.code === 'CALL_EXCEPTION' && e.data) return e.data
+    if (e.code === 'CALL_EXCEPTION' && e.data) {
+      console.log('[Deployless.mapError] Returning error.data (ethers v6)')
+      return e.data
+    }
+    console.error('[Deployless.mapError] Re-throwing original error')
     throw e
   }
 }

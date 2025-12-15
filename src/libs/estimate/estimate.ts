@@ -32,6 +32,14 @@ export async function getEstimation(
   switcher: BundlerSwitcher,
   errorCallback: Function
 ): Promise<FullEstimation | Error> {
+  console.log('[getEstimation] START - Entry point', {
+    accountAddr: op.accountAddr,
+    chainId: op.chainId,
+    callsCount: op.calls.length,
+    networkName: network.name
+  })
+
+  console.log('[getEstimation] Initializing all estimation methods')
   const ambireEstimation = ambireEstimateGas(
     baseAcc,
     accountState,
@@ -61,6 +69,7 @@ export async function getEstimation(
     feeTokens
   )
 
+  console.log('[getEstimation] Waiting for all estimations with retries')
   const estimations = await estimateWithRetries<
     [FullEstimation['ambire'], FullEstimation['bundler'], FullEstimation['provider']]
   >(
@@ -70,12 +79,34 @@ export async function getEstimation(
     12000
   )
 
+  console.log('[getEstimation] Estimations completed', {
+    isError: estimations instanceof Error,
+    errorMessage: estimations instanceof Error ? estimations.message : undefined,
+    resultsCount: Array.isArray(estimations) ? estimations.length : 0
+  })
+
   // this is only if we hit a timeout 5 consecutive times
-  if (estimations instanceof Error) return estimations
+  if (estimations instanceof Error) {
+    console.error('[getEstimation] Retries exhausted - returning error', {
+      errorMessage: estimations.message,
+      errorName: estimations.name
+    })
+    return estimations
+  }
 
   const ambireGas = estimations[0]
   const bundlerGas = estimations[1]
   const providerGas = estimations[2]
+
+  console.log('[getEstimation] Individual estimation results', {
+    ambireIsError: ambireGas instanceof Error,
+    ambireErrorMessage: ambireGas instanceof Error ? ambireGas.message : undefined,
+    bundlerIsError: bundlerGas instanceof Error,
+    bundlerErrorMessage: bundlerGas instanceof Error ? bundlerGas.message : undefined,
+    providerIsError: providerGas instanceof Error,
+    providerErrorMessage: providerGas instanceof Error ? providerGas.message : undefined
+  })
+
   const fullEstimation: FullEstimation = {
     provider: providerGas,
     ambire: ambireGas,
@@ -84,12 +115,26 @@ export async function getEstimation(
   }
 
   const criticalError = baseAcc.getEstimationCriticalError(fullEstimation, op)
-  if (criticalError) return criticalError
+  if (criticalError) {
+    console.error('[getEstimation] Critical error detected', {
+      errorMessage: criticalError.message,
+      errorName: criticalError.name
+    })
+    return criticalError
+  }
 
   let flags = {}
   if (!(ambireGas instanceof Error) && ambireGas) flags = { ...ambireGas.flags }
   if (!(bundlerGas instanceof Error) && bundlerGas) flags = { ...bundlerGas.flags }
   fullEstimation.flags = flags
+
+  console.log('[getEstimation] SUCCESS - Returning full estimation', {
+    hasAmbire: !(ambireGas instanceof Error),
+    hasBundler: !(bundlerGas instanceof Error),
+    hasProvider: !(providerGas instanceof Error),
+    flags
+  })
+
   return fullEstimation
 }
 

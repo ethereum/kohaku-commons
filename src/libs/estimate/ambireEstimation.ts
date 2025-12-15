@@ -56,19 +56,44 @@ export async function ambireEstimateGas(
   feeTokens: TokenResult[],
   nativeToCheck: string[]
 ): Promise<AmbireEstimation | Error> {
+  console.log('[ambireEstimateGas] START - Entry point', {
+    accountAddr: op.accountAddr,
+    chainId: op.chainId,
+    callsCount: op.calls.length,
+    isEOA: accountState.isEOA,
+    isSmarterEoa: accountState.isSmarterEoa,
+    networkName: network.name,
+    rpcNoStateOverride: network.rpcNoStateOverride
+  })
+
   const account = baseAcc.getAccount()
 
   // Bypass Helios for estimations
   // @TODO this should be removed when Helios supports state overrides
   let estimationProvider = provider
   if (provider instanceof BrowserProvider) {
+    console.log('[ambireEstimateGas] Using fallback provider (bypassing Helios)')
     estimationProvider = provider.getFallbackProvider()
   }
+  
+  const isStillPureEoa = accountState.isEOA && !accountState.isSmarterEoa
+  // For pure EOAs, we need state override for spoof signatures, so we force supportStateOverride to true
+  // This ensures stateOverrideSupported is set to true in the constructor.
+  // If the RPC doesn't actually support it, we'll catch the error and fallback gracefully.
+  const supportStateOverride = isStillPureEoa ? true : !network.rpcNoStateOverride
+  console.log('[ambireEstimateGas] Deployless initialization params', {
+    isStillPureEoa,
+    supportStateOverride,
+    rpcNoStateOverride: network.rpcNoStateOverride
+  })
   const deploylessEstimator = fromDescriptor(
     estimationProvider,
     Estimation,
-    !network.rpcNoStateOverride
+    supportStateOverride
   )
+  console.log('[ambireEstimateGas] Deployless estimator created', {
+    isLimitedAt24kbData: deploylessEstimator.isLimitedAt24kbData
+  })
 
   // only the activator call is added here as there are cases where it's needed
   const calls = [...op.calls.map(toSingletonCall)]
@@ -76,7 +101,6 @@ export async function ambireEstimateGas(
     calls.push(getActivatorCall(op.accountAddr))
   }
 
-  const isStillPureEoa = accountState.isEOA && !accountState.isSmarterEoa
   const checkInnerCallsArgs = [
     account.addr,
     ...getAccountDeployParams(account),
@@ -94,16 +118,115 @@ export async function ambireEstimateGas(
     nativeToCheck,
     network.isOptimistic ? OPTIMISTIC_ORACLE : ZeroAddress
   ]
-  const ambireEstimation = await deploylessEstimator
-    .call('estimate', checkInnerCallsArgs, {
-      from: DEPLOYLESS_SIMULATION_FROM,
-      blockTag: 'pending', // there's no reason to do latest
-      mode: isStillPureEoa ? DeploylessMode.StateOverride : DeploylessMode.Detect,
-      stateToOverride: isStillPureEoa ? getEoaSimulationStateOverride(account.addr) : null
+  
+  // For pure EOAs, we need state override for simulation with spoof signatures.
+  // We ALWAYS try StateOverride mode first for pure EOAs, regardless of network.rpcNoStateOverride,
+  // because we've already forced supportStateOverride: true in the initialization.
+  // If the RPC doesn't actually support it, we'll catch the error and fallback gracefully.
+  let ambireEstimation
+  if (isStillPureEoa) {
+    console.log('[ambireEstimateGas] Pure EOA detected - attempting StateOverride mode first (ignoring rpcNoStateOverride)', {
+      rpcNoStateOverride: network.rpcNoStateOverride,
+      note: 'For pure EOAs, we always try StateOverride first for spoof signatures'
     })
-    .catch(getHumanReadableEstimationError)
+    // Try with StateOverride mode first for pure EOAs (required for spoof signatures)
+    // We ignore network.rpcNoStateOverride because:
+    // 1. We've already initialized with supportStateOverride: true
+    // 2. The RPC might actually support it even if the network config says it doesn't
+    // 3. We need state override for spoof signatures to work
+    try {
+      console.log('[ambireEstimateGas] Calling deployless.estimate with StateOverride mode', {
+        mode: 'StateOverride',
+        hasStateToOverride: !!getEoaSimulationStateOverride(account.addr),
+        accountAddr: account.addr
+      })
+      ambireEstimation = await deploylessEstimator.call('estimate', checkInnerCallsArgs, {
+        from: DEPLOYLESS_SIMULATION_FROM,
+        blockTag: 'pending',
+        mode: DeploylessMode.StateOverride,
+        stateToOverride: getEoaSimulationStateOverride(account.addr)
+      })
+      console.log('[ambireEstimateGas] StateOverride mode succeeded', {
+        resultType: Array.isArray(ambireEstimation) ? 'array' : typeof ambireEstimation
+      })
+    } catch (error: any) {
+      console.error('[ambireEstimateGas] StateOverride mode failed', {
+        errorMessage: error?.message,
+        errorName: error?.name,
+        errorCode: error?.code,
+        errorString: String(error),
+        hasData: !!error?.data,
+        hasErrorData: !!error?.error?.data
+      })
+      
+      // For any error with StateOverride mode, fallback to Detect mode
+      // This handles cases where:
+      // 1. State override is explicitly not supported by the RPC
+      // 2. The RPC call fails for any other reason (like require(false) revert)
+      console.log('[ambireEstimateGas] Falling back to Detect mode after StateOverride failure')
+      try {
+        ambireEstimation = await deploylessEstimator.call('estimate', checkInnerCallsArgs, {
+          from: DEPLOYLESS_SIMULATION_FROM,
+          blockTag: 'pending',
+          mode: DeploylessMode.Detect,
+          stateToOverride: null
+        })
+        console.log('[ambireEstimateGas] Detect mode fallback succeeded')
+      } catch (fallbackError: any) {
+        console.error('[ambireEstimateGas] Detect mode fallback also failed', {
+          errorMessage: fallbackError?.message,
+          errorName: fallbackError?.name,
+          errorCode: fallbackError?.code,
+          errorString: String(fallbackError),
+          hasData: !!fallbackError?.data
+        })
+        ambireEstimation = getHumanReadableEstimationError(fallbackError)
+      }
+    }
+  } else {
+    console.log('[ambireEstimateGas] Smart account or non-EOA - using Detect mode', {
+      isStillPureEoa,
+      rpcNoStateOverride: network.rpcNoStateOverride
+    })
+    // For smart accounts, use Detect mode
+    try {
+      ambireEstimation = await deploylessEstimator.call('estimate', checkInnerCallsArgs, {
+        from: DEPLOYLESS_SIMULATION_FROM,
+        blockTag: 'pending',
+        mode: DeploylessMode.Detect,
+        stateToOverride: null
+      })
+      console.log('[ambireEstimateGas] Detect mode succeeded')
+    } catch (error: any) {
+      console.error('[ambireEstimateGas] Detect mode failed', {
+        errorMessage: error?.message,
+        errorName: error?.name,
+        errorCode: error?.code,
+        errorString: String(error)
+      })
+      ambireEstimation = getHumanReadableEstimationError(error)
+    }
+  }
 
-  if (ambireEstimation instanceof Error) return ambireEstimation
+  console.log('[ambireEstimateGas] Estimation result check', {
+    isError: ambireEstimation instanceof Error,
+    errorMessage: ambireEstimation instanceof Error ? ambireEstimation.message : undefined,
+    resultType: ambireEstimation instanceof Error ? 'Error' : typeof ambireEstimation
+  })
+
+  if (ambireEstimation instanceof Error) {
+    console.error('[ambireEstimateGas] Returning error', {
+      message: ambireEstimation.message,
+      name: ambireEstimation.name,
+      stack: ambireEstimation.stack
+    })
+    return ambireEstimation
+  }
+
+  console.log('[ambireEstimateGas] Parsing estimation result', {
+    resultIsArray: Array.isArray(ambireEstimation),
+    resultLength: Array.isArray(ambireEstimation) ? ambireEstimation.length : 0
+  })
 
   const [
     [
@@ -119,6 +242,14 @@ export async function ambireEstimateGas(
     ]
   ] = ambireEstimation
 
+  console.log('[ambireEstimateGas] Parsed estimation data', {
+    deploymentSuccess: deployment?.success,
+    accountOpSuccess: accountOp?.success,
+    accountOpErr: accountOp?.err,
+    outcomeNonce: outcomeNonce?.toString(),
+    feeTokenOutcomesCount: feeTokenOutcomes?.length
+  })
+
   const ambireEstimationError = getInnerCallFailure(
     accountOp,
     calls,
@@ -126,7 +257,14 @@ export async function ambireEstimateGas(
     feeTokens.find((token) => token.address === ZeroAddress && !token.flags.onGasTank)?.amount
   )
 
-  if (ambireEstimationError) return ambireEstimationError
+  if (ambireEstimationError) {
+    console.error('[ambireEstimateGas] Inner call failure detected', {
+      errorMessage: ambireEstimationError.message,
+      accountOpSuccess: accountOp?.success,
+      accountOpErr: accountOp?.err
+    })
+    return ambireEstimationError
+  }
 
   // if there's a nonce discrepancy, it means the portfolio simulation
   // will fail so we need to update the account state and the portfolio
@@ -201,11 +339,21 @@ export async function ambireEstimateGas(
     })
   )
 
-  return {
+  const result = {
     gasUsed,
     deploymentGas: deployment.gasUsed,
     feePaymentOptions: [...feeTokenOptions, ...nativeTokenOptions],
     ambireAccountNonce: accountOp.success ? Number(outcomeNonce - 1n) : Number(outcomeNonce),
     flags
   }
+
+  console.log('[ambireEstimateGas] SUCCESS - Returning estimation result', {
+    gasUsed: result.gasUsed.toString(),
+    deploymentGas: result.deploymentGas.toString(),
+    feePaymentOptionsCount: result.feePaymentOptions.length,
+    ambireAccountNonce: result.ambireAccountNonce,
+    flags
+  })
+
+  return result
 }
