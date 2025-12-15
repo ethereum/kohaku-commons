@@ -159,8 +159,10 @@ export class Deployless {
 
     const callData = this.iface.encodeFunctionData(methodName, args)
     const toAddr = opts.to ?? arbitraryAddr
+    const useStateOverride = !!this.stateOverrideSupported && !forceProxy
+
     const callPromise =
-      !!this.stateOverrideSupported && !forceProxy
+      useStateOverride
         ? (this.provider as JsonRpcProvider).send('eth_call', [
             {
               to: toAddr,
@@ -199,8 +201,20 @@ export class Deployless {
       })
     ])
 
-    const returnDataRaw = mapResponse(await mapError(callPromisedWithResolveTimeout))
-    return this.iface.decodeFunctionResult(methodName, returnDataRaw)
+    try {
+      const returnDataRaw = mapResponse(await mapError(callPromisedWithResolveTimeout))
+      
+      // Check for empty data - this can happen if the RPC doesn't support state override
+      // but we tried to use it anyway
+      if (!returnDataRaw || returnDataRaw === '0x' || returnDataRaw.length <= 2) {
+        throw new Error(`${methodName}: RPC returned empty data (likely state override not supported)`)
+      }
+      
+      const result = this.iface.decodeFunctionResult(methodName, returnDataRaw)
+      return result
+    } catch (error: any) {
+      throw error
+    }
   }
 }
 
@@ -219,14 +233,21 @@ export function fromDescriptor(
 
 async function mapError(callPromise: Promise<string>): Promise<string> {
   try {
-    return await callPromise
+    const result = await callPromise
+    return result
   } catch (e: any) {
     // ethers v5 provider: e.error.data is usually our eth_call output in case of execution reverted
-    if (e.error && e.error.data) return e.error.data
+    if (e.error && e.error.data) {
+      return e.error.data
+    }
     // ethers v5 provider: unwrap the wrapping that ethers adds to this type of error in case of provider.call
-    if (e.code === 'CALL_EXCEPTION' && e.error) throw e.error
+    if (e.code === 'CALL_EXCEPTION' && e.error) {
+      throw e.error
+    }
     // ethers v6 provider: wrapping the error in case of execution reverted
-    if (e.code === 'CALL_EXCEPTION' && e.data) return e.data
+    if (e.code === 'CALL_EXCEPTION' && e.data) {
+      return e.data
+    }
     throw e
   }
 }
