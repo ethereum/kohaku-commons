@@ -43,7 +43,7 @@
     "secp256k1": "^5.0.1",
     "url": "^0.11.0",
     "validator": "^13.7.0",
-    "@a16z/helios": "0.10.2"
+    "@a16z/helios": "0.11.0"
   },
   "peerDependenciesMeta": {
     "@noble/hashes": {

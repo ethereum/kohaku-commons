@@ -49,7 +49,16 @@ export class ProvidersController extends EventEmitter {
         // no need to do anything; try/catch is just in case a double destroy is attempted
       }
 
-      this.providers[network.chainId.toString()] = getRpcProvider(network)
+      const newProvider = getRpcProvider(network)
+
+      // If the provider supports checkpoint updates, subscribe and persist in network config
+      if ('onCheckpointUpdate' in newProvider) {
+        newProvider.onCheckpointUpdate(async (heliosCheckpoint: string) => {
+          await this.#networks.updateNetwork({ heliosCheckpoint }, network.chainId)
+        })
+      }
+
+      this.providers[network.chainId.toString()] = newProvider
     }
   }
 

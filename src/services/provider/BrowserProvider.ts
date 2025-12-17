@@ -28,4 +28,8 @@ export class BrowserProvider extends BrowserProviderEthers implements RPCProvide
   async getResolver(name: string): Promise<null | EnsResolver> {
     return super.getResolver(name)
   }
+
+  onCheckpointUpdate(callback: (checkpoint: string) => void) {
+    this.#heliosProvider.onCheckpointUpdate(callback)
+  }
 }

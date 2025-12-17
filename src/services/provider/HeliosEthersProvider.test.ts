@@ -189,7 +189,8 @@ function mockHelios({
             })
             resolve({
               waitSynced: () => syncPromise,
-              request: mockHeliosRequest
+              request: mockHeliosRequest,
+              on: jest.fn()
             })
           }, initTimeout)
         })
@@ -256,6 +257,9 @@ function getMockedRequestFunction(): (payload: {
           parentHash: '0x12345',
           nonce: '0x12345'
         }
+        break
+      case 'helios_getCurrentCheckpoint':
+        result = '0x1234567890abcdef'
         break
       default:
         throw new Error(`Unknown method: ${payload.method}`)
