@@ -18,7 +18,7 @@ const testnetNetworks: Network[] = [
     rpcUrls: [SEPOLIA_RPC_URL || ''],
     selectedRpcUrl: SEPOLIA_RPC_URL || '',
     consensusRpcUrl: 'http://unstable.sepolia.beacon-api.nimbus.team/',
-    rpcNoStateOverride: true,
+    rpcNoStateOverride: false,
     chainId: 11155111n,
     iconUrls: ['https://icons.llamao.fi/icons/chains/rsz_ethereum.jpg'],
     explorerUrl: 'https://sepolia.etherscan.io',
@@ -39,7 +39,8 @@ const testnetNetworks: Network[] = [
     feeOptions: { is1559: true },
     predefined: true,
     useHelios: USE_HELIOS === 'true',
-    heliosCheckpoint: HELIOS_CHECKPOINT || '0x5ba822735c5060e34516eab195b1a84af6b6e830f95dca276812354994f70245'
+    heliosCheckpoint:
+      HELIOS_CHECKPOINT || '0x178bea570e6aff265cf670b1b65be4479dca2ed9c8c4d0a5752ffa36ea670395'
   }
   // {
   //   name: 'Base Sepolia',

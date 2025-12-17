@@ -102,6 +102,8 @@ export interface AddNetworkRequestParams {
   nativeAssetName: Network['nativeAssetName']
   explorerUrl: Network['explorerUrl']
   iconUrls: Network['iconUrls']
+  useHelios: Network['useHelios']
+  heliosCheckpoint: Network['heliosCheckpoint']
 }
 
 export interface ChainlistNetwork {

@@ -34,6 +34,10 @@ export class HeliosEthersProvider implements Eip1193Provider {
 
   private fallbackProvider: JsonRpcProvider | null = null
 
+  private checkpointEventHandler?: (checkpoint: string) => void
+
+  private checkpointUpdateCallback?: (checkpoint: string) => void
+
   constructor(config: MinNetworkConfig, rpcUrl: string, staticNetwork: Network) {
     this.config = config
     this.rpcUrl = rpcUrl
@@ -142,6 +146,7 @@ export class HeliosEthersProvider implements Eip1193Provider {
     try {
       await Promise.race([this.heliosSyncPromise, this.throwAfterTimeout])
       this.syncedHelios = helios
+      await this.subscribeToCheckpointUpdates()
       return helios
     } catch (error) {
       this.throwAfterTimeout = undefined
@@ -152,6 +157,23 @@ export class HeliosEthersProvider implements Eip1193Provider {
         clearTimeout(this.timeoutTimerId)
         this.timeoutTimerId = undefined
       }
+    }
+  }
+
+  onCheckpointUpdate(callback: (checkpoint: string) => void) {
+    this.checkpointUpdateCallback = callback
+  }
+
+  private async subscribeToCheckpointUpdates() {
+    if (!this.syncedHelios || this.checkpointEventHandler) return
+
+    this.checkpointEventHandler = (checkpoint: string) =>
+      this.checkpointUpdateCallback?.(checkpoint)
+    this.syncedHelios.on('helios_checkpointUpdated', this.checkpointEventHandler)
+
+    if (this.checkpointUpdateCallback) {
+      const currentCheckpoint = await this.getCurrentCheckpoint()
+      if (currentCheckpoint) this.checkpointUpdateCallback(currentCheckpoint)
     }
   }
 
@@ -179,6 +201,21 @@ export class HeliosEthersProvider implements Eip1193Provider {
       return await helios.request({ method, params })
     } catch (error) {
       return this.getFallbackProvider().send(method, params ?? [])
+    }
+  }
+
+  async getCurrentCheckpoint(): Promise<string | null> {
+    try {
+      if (this.syncedHelios) {
+        return await this.syncedHelios.request({
+          method: 'helios_getCurrentCheckpoint',
+          params: []
+        })
+      }
+
+      return null
+    } catch (error) {
+      return null
     }
   }
 }
