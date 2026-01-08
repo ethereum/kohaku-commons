@@ -2121,7 +2121,7 @@ export class MainController extends EventEmitter {
       // Pass false to keep SignAccountOpController alive during tracking
       // This prevents stale state issues on subsequent deposits
       // The SignAccountOpController will be destroyed when user navigates away
-      this.railgun.resetForm(false)
+      this.railgun.resetForm()
     }
 
     await this.#notificationManager.create({

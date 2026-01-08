@@ -428,13 +428,24 @@ export class ActivityController extends EventEmitter {
         c.statuses.includes(accountOp.status as AccountOpStatus)
       )
 
+      // Check for Railgun or Privacy Pools withdrawal meta tags
+      const meta = accountOp.meta as any
+      const isRailgunWithdrawal = meta?.isRailgunWithdrawal === true
+      const isPrivacyPoolsWithdrawal = meta?.isPrivacyPoolsWithdrawal === true
+
+      // Customize title based on withdrawal type
+      let title = content?.title || 'Transaction successfully signed and sent!\nCheck it out on the block explorer!'
+      if (isRailgunWithdrawal) {
+        title = 'Railgun Withdrawal\nCheck it out on the block explorer!'
+      } else if (isPrivacyPoolsWithdrawal) {
+        title = 'Privacy Pools Withdrawal\nCheck it out on the block explorer!'
+      }
+
       return {
         id: accountOp.txnId || accountOp.identifiedBy.identifier,
         type: content?.type || 'success',
         category: content?.category || 'pending-to-be-confirmed-acc-op',
-        title:
-          content?.title ||
-          'Transaction successfully signed and sent!\nCheck it out on the block explorer!',
+        title,
         text: '',
         actions: [
           {

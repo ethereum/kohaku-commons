@@ -526,6 +526,7 @@ export class RailgunController extends EventEmitter {
   destroyLatestBroadcastedAccountOp() {
     this.shouldTrackLatestBroadcastedAccountOp = false
     this.latestBroadcastedAccountOp = null
+    this.latestBroadcastedToken = null
     this.emitUpdate()
   }
 
@@ -612,11 +613,7 @@ export class RailgunController extends EventEmitter {
       throw new Error('No account selected')
     }
 
-    // Clear any old transaction state before starting a new transaction
-    // This ensures old "Private Transfer Done!" states don't persist when starting a new withdrawal
-    this.latestBroadcastedAccountOp = null
-    this.latestBroadcastedToken = null
-    this.emitUpdate()
+    console.log('DEBUG: directBroadcastWithdrawal called')
 
     // IMMEDIATELY set latestBroadcastedAccountOp to show loading screen
     // This allows the UI to transition to the track screen right away
@@ -656,6 +653,8 @@ export class RailgunController extends EventEmitter {
 
     this.emitUpdate()
 
+    console.log('DEBUG: directBroadcastWithdrawal emitted update')
+
     try {
       // Call the relayer /forward endpoint
       const response = await this.#callRelayer('/forward', 'POST', {
@@ -678,7 +677,7 @@ export class RailgunController extends EventEmitter {
       console.log('DEBUG: Parsed response - status:', apiStatus, 'txHash:', txHash);
 
       // Handle response based on status
-      if (apiStatus === 'FAILURE' || apiStatus === 'failure' || apiStatus === 'failed') {
+      if (apiStatus !== 200) {
         if (this.latestBroadcastedAccountOp) {
           this.latestBroadcastedAccountOp = {
             ...this.latestBroadcastedAccountOp,
@@ -704,10 +703,10 @@ export class RailgunController extends EventEmitter {
           signature: txHash as `0x${string}`,
           accountOpToExecuteBefore: null,
           calls: [],
-          status: AccountOpStatus.BroadcastedButNotConfirmed,
+          status: AccountOpStatus.Success,
           txnId: txHash,
           identifiedBy: {
-            type: 'Relayer',
+            type: 'Transaction',
             identifier: txHash
           },
           timestamp: new Date().getTime(),
@@ -722,56 +721,10 @@ export class RailgunController extends EventEmitter {
         await this.#activity.addAccountOp(submittedAccountOp)
 
         this.latestBroadcastedAccountOp = submittedAccountOp
-
+        this.latestBroadcastedToken = this.selectedToken
+        this.shouldTrackLatestBroadcastedAccountOp = true
         this.emitUpdate()
-
-        // Immediately check transaction receipt to update status if available
-        // This provides immediate feedback to the user instead of waiting for the periodic status update
-        const network = this.#networks.networks.find((net) => net.chainId === BigInt(params.chainId))
-        if (network) {
-          const provider = this.#providers.providers[network.chainId.toString()]
-          if (provider) {
-            // Check receipt in background - don't await to avoid blocking
-            provider
-              .getTransactionReceipt(txHash)
-              .then((receipt) => {
-                if (receipt) {
-                  const isSuccess = !!receipt.status
-                  const newStatus = isSuccess ? AccountOpStatus.Success : AccountOpStatus.Failure
-
-                  // Update activity controller
-                  if (this.#selectedAccount?.account) {
-                    this.#activity
-                      .updateAccountOpStatus(
-                        this.#selectedAccount.account.addr,
-                        BigInt(params.chainId),
-                        txHash,
-                        newStatus
-                      )
-                      .then(() => {
-                        // Update local tracking
-                        if (this.latestBroadcastedAccountOp) {
-                          this.latestBroadcastedAccountOp = {
-                            ...this.latestBroadcastedAccountOp,
-                            // @ts-ignore
-                            status: newStatus
-                          }
-                          this.emitUpdate()
-                        }
-                      })
-                      .catch((error) => {
-                        console.error('Error updating accountOp status:', error)
-                      })
-                  }
-                }
-              })
-              .catch((error) => {
-                // Receipt not available yet - that's fine, the periodic status update will handle it
-                console.log('Transaction receipt not available yet, will be checked by periodic update')
-              })
-          }
-        }
-      } else if (apiStatus === 'SUCCESS' || apiStatus === 'success') {
+      } else if (apiStatus === 200) {
         // Status is SUCCESS but no txHash - this shouldn't happen, but handle gracefully
         throw new Error('Transaction submitted successfully but no transaction hash returned')
       } else {
