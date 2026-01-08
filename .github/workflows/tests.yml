@@ -34,11 +34,13 @@ jobs:
         run: npm ci
 
       - name: Hardhat Tests 🧑‍🔬
+        if: secrets.SEED != ''
         env:
           SEED: ${{ secrets.SEED }}
         run: npm run hardhat
 
       - name: JEST Tests 🧑‍🔬
+        if: secrets.SEED != ''
         env:
           SEED: ${{ secrets.SEED }}
           REACT_APP_PIMLICO_API_KEY: ${{ secrets.REACT_APP_PIMLICO_API_KEY }}
