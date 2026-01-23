@@ -1,14 +1,17 @@
 import { JsonRpcProvider, Network } from 'ethers'
 
-import { BrowserProvider } from './BrowserProvider'
 import { Network as NetworkConfig } from '../../interfaces/network'
+import { BrowserProvider } from './BrowserProvider'
+import { ColibriRpcProvider, ColibriRpcProviderOptions, isColibriEnabledForChain } from './ColibriRpcProvider'
 import { HeliosEthersProvider } from './HeliosEthersProvider'
 
 export type MinNetworkConfig = Partial<NetworkConfig> & {
   rpcUrls: string[]
 }
 
-const getRpcProvider = (config: MinNetworkConfig, forceBypassHelios: boolean = false) => {
+export type GetRpcProviderConfig = MinNetworkConfig & ColibriRpcProviderOptions
+
+const getRpcProvider = (config: GetRpcProviderConfig, forceBypassHelios: boolean = false) => {
   if (!config.rpcUrls.length) {
     throw new Error('rpcUrls must be a non-empty array')
   }
@@ -38,6 +41,13 @@ const getRpcProvider = (config: MinNetworkConfig, forceBypassHelios: boolean = f
     }
     const heliosProvider = new HeliosEthersProvider(config, rpcUrl, staticNetwork)
     return new BrowserProvider(heliosProvider, rpcUrl)
+  }
+
+  if (config.chainId && isColibriEnabledForChain(config.chainId, { colibri: config.colibri })) {
+    return new ColibriRpcProvider(rpcUrl, config.chainId, {
+      batchMaxCount: config.batchMaxCount,
+      colibri: config.colibri
+    })
   }
 
   return new JsonRpcProvider(rpcUrl, staticNetwork, {
