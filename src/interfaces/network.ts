@@ -2,6 +2,8 @@ import { BUNDLER } from '../consts/bundlers'
 
 export type ChainId = bigint
 
+export type RpcProviderKind = 'rpc' | 'helios' | 'colibri'
+
 export interface Erc4337settings {
   enabled: boolean
   hasPaymaster: boolean
@@ -63,6 +65,8 @@ export interface Network {
   explorerUrl: string
   selectedRpcUrl: string
   consensusRpcUrl?: string
+  proverRpcUrl?: string
+  rpcProvider?: RpcProviderKind
   erc4337: NetworkInfo['erc4337']
   rpcNoStateOverride: NetworkInfo['rpcNoStateOverride']
   feeOptions: NetworkInfo['feeOptions']
@@ -89,7 +93,6 @@ export interface Network {
   allowForce4337?: boolean
   disabled?: boolean
   batchMaxCount?: number
-  useHelios?: boolean
   heliosCheckpoint?: string
 }
 
@@ -102,8 +105,8 @@ export interface AddNetworkRequestParams {
   nativeAssetName: Network['nativeAssetName']
   explorerUrl: Network['explorerUrl']
   iconUrls: Network['iconUrls']
-  useHelios: Network['useHelios']
-  heliosCheckpoint: Network['heliosCheckpoint']
+  rpcProvider?: Network['rpcProvider']
+  heliosCheckpoint?: Network['heliosCheckpoint']
 }
 
 export interface ChainlistNetwork {

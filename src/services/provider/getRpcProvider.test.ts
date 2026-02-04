@@ -24,18 +24,18 @@ function getRpcProvider(config: any) {
 }
 
 describe('getRpcProvider', () => {
-  test('should return JsonRpcProvider when useHelios is false', () => {
+  test('should return JsonRpcProvider when rpcProvider is rpc', () => {
     const provider = getRpcProvider({
       ...getConfigByName('Ethereum'),
-      useHelios: false
+      rpcProvider: 'rpc'
     })
     expect(provider).toBeInstanceOf(JsonRpcProvider)
   })
 
-  test('should return BrowserProvider when useHelios is true', () => {
+  test('should return BrowserProvider when rpcProvider is helios', () => {
     const provider = getRpcProvider({
       ...getConfigByName('Ethereum'),
-      useHelios: true
+      rpcProvider: 'helios'
     })
     expect(provider).toBeInstanceOf(BrowserProvider)
   })

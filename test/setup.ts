@@ -6,8 +6,8 @@ jest.mock('../src/services/provider/getRpcProvider', () => {
   return {
     ...originalModule,
     getRpcProvider: (config: any) => {
-      // Force useHelios to false during tests to avoid the Helios branch
-      const testConfig = { ...config, useHelios: false }
+      // Force provider to plain RPC during tests to avoid Helios/Colibri branches by default.
+      const testConfig = { ...config, rpcProvider: 'rpc' }
       return originalModule.getRpcProvider(testConfig)
     }
   }

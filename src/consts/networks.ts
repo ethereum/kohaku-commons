@@ -10,6 +10,7 @@ const networks: Network[] = [
     rpcUrls: ['https://invictus.ambire.com/ethereum'],
     selectedRpcUrl: 'https://invictus.ambire.com/ethereum',
     consensusRpcUrl: 'http://testing.mainnet.beacon-api.nimbus.team/',
+    proverRpcUrl: 'https://mainnet1.colibri-proof.tech/',
     rpcNoStateOverride: true,
     chainId: 1n,
     explorerUrl: 'https://etherscan.io',
@@ -25,7 +26,7 @@ const networks: Network[] = [
     predefined: true,
     wrappedAddr: '0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2',
     disableEstimateGas: true,
-    useHelios: true,
+    rpcProvider: 'helios',
     heliosCheckpoint: '0xe645d010dd9f2480e3b7a2e6632039c723378a7b5f9dd94f692dd61269b7f91d'
   },
   {
@@ -93,7 +94,7 @@ const networks: Network[] = [
     predefined: true,
     disableEstimateGas: true,
     wrappedAddr: '0x4200000000000000000000000000000000000006',
-    useHelios: true
+    rpcProvider: 'helios'
   },
   {
     name: 'Avalanche',
@@ -190,7 +191,7 @@ const networks: Network[] = [
     predefined: true,
     disableEstimateGas: true,
     wrappedAddr: '0x4200000000000000000000000000000000000006',
-    useHelios: true
+    rpcProvider: 'helios'
   },
   {
     name: 'Scroll',

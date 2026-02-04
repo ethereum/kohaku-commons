@@ -11,14 +11,12 @@ export type ColibriRpcProviderOptions = JsonRpcApiProviderOptions & {
 }
 
 /**
- * Central feature gate for Colibri.
+ * Central allowlist for Colibri-supported chains.
  *
- * First iteration: Sepolia only. This makes rollout safe while we evaluate
- * proof coverage/performance before enabling more networks.
+ * This keeps rollout safe while we evaluate proof coverage/performance before enabling more networks.
  */
-export const isColibriEnabledForChain = (chainId?: bigint | number, options?: ColibriRpcProviderOptions) => {
+export const isColibriSupportedChain = (chainId?: bigint | number) => {
     if (!chainId) return false
-    if (process.env.USE_COLIBRI !== 'true' && !options?.colibri) return false
     // TODO we sould fetch the supported chains from colibri itself, as soon as colibri offers a function to do so
     const supportedChains = [1, 11155111, 100, 10200]
     return supportedChains.includes(Number(chainId))
@@ -91,7 +89,8 @@ export class ColibriRpcProvider extends JsonRpcProvider {
             // Enforced by the provider based on network selection to avoid inconsistent configs.
             // (Do not allow callers to accidentally mismatch `chainId`/`rpcs`.)
             chainId: Number(chainId),
-            rpcs: [rpcUrl]
+            rpcs: [rpcUrl],
+            zk_proof: true
         }
 
         this.#colibri = new Colibri(colibriConfig)
