@@ -809,8 +809,8 @@ export class PortfolioController extends EventEmitter {
             specialErc20Hints
           }
 
-          // Helios cannot support pending blocks
-          const pendingBlockTag = network.useHelios ? 'latest' : 'pending'
+          // Helios or Colibri cannot support pending blocks
+          const pendingBlockTag = network.rpcProvider !== 'rpc' ? 'latest' : 'pending'
 
           const [isSuccessfulLatestUpdate] = await Promise.all([
             // Latest state update

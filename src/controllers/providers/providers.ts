@@ -37,9 +37,13 @@ export class ProvidersController extends EventEmitter {
 
   setProvider(network: Network) {
     const provider = this.providers[network.chainId.toString()]
+    const desiredProviderKind = network.rpcProvider ?? 'rpc'
 
-    // Only update the RPC if the new RPC is different from the current one or if there is no RPC for this network yet.
-    if (!provider || provider?._getConnection().url !== network.selectedRpcUrl) {
+    // Update provider when RPC URL or provider kind changes (or if missing).
+    if (!provider ||
+      provider?._getConnection().url !== network.selectedRpcUrl ||
+      provider?.rpcProvider !== desiredProviderKind
+    ) {
       const oldRPC = this.providers[network.chainId.toString()]
 
       // If an RPC fails once it will try to reconnect every second. If we don't destroy the old RPC it will keep trying to reconnect forever.

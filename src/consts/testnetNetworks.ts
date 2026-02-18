@@ -2,8 +2,15 @@ import { Network } from '../interfaces/network'
 import { PIMLICO } from './bundlers'
 
 const SEPOLIA_RPC_URL = process.env.SEPOLIA_RPC_URL
-const USE_HELIOS = process.env.USE_HELIOS
+const RPC_PROVIDER = process.env.RPC_PROVIDER
 const HELIOS_CHECKPOINT = process.env.HELIOS_CHECKPOINT
+
+function resolveRpcProvider() {
+  if (RPC_PROVIDER === 'rpc' || RPC_PROVIDER === 'helios' || RPC_PROVIDER === 'colibri') return RPC_PROVIDER
+  // Backward-compatibility: allow legacy flag while migrating env files.
+  if (process.env.USE_HELIOS === 'true') return 'helios'
+  return 'rpc'
+}
 
 if (!SEPOLIA_RPC_URL) {
   throw new Error('SEPOLIA_RPC_URL is not set')
@@ -18,6 +25,7 @@ const testnetNetworks: Network[] = [
     rpcUrls: [SEPOLIA_RPC_URL || ''],
     selectedRpcUrl: SEPOLIA_RPC_URL || '',
     consensusRpcUrl: 'http://unstable.sepolia.beacon-api.nimbus.team/',
+    proverRpcUrl: 'https://sepolia.colibri-proof.tech/',
     rpcNoStateOverride: false,
     chainId: 11155111n,
     iconUrls: ['https://icons.llamao.fi/icons/chains/rsz_ethereum.jpg'],
@@ -38,7 +46,7 @@ const testnetNetworks: Network[] = [
     features: [],
     feeOptions: { is1559: true },
     predefined: true,
-    useHelios: USE_HELIOS === 'true',
+    rpcProvider: resolveRpcProvider(),
     heliosCheckpoint:
       HELIOS_CHECKPOINT || '0x178bea570e6aff265cf670b1b65be4479dca2ed9c8c4d0a5752ffa36ea670395'
   }
