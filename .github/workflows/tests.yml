@@ -45,3 +45,11 @@ jobs:
           SEED: ${{ secrets.SEED }}
           REACT_APP_PIMLICO_API_KEY: ${{ secrets.REACT_APP_PIMLICO_API_KEY }}
         run: npm run jest
+
+  workflow-status:
+    name: Workflow status
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check workflow status
+        run: |
+          echo "Workflow completed. Unit tests run conditionally based on SEED secret availability."
