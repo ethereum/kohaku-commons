@@ -24,6 +24,9 @@ export const AAVE_V3 = {
   '43114': {
     poolAddr: '0x794a61358D6845594F94dc1DB02A252b5b4814aD'
   },
+  // '11155111': {
+  //   poolAddr: '0x6Ae43d3271ff6888e7Fc43Fd7321a503ff738951'
+  // },
   // custom chains
   // harmony
   // unreliable
@@ -120,5 +123,10 @@ export const UNISWAP_V3 = {
   '480': {
     nonfungiblePositionManagerAddr: '0xec12a9F9a09f50550686363766Cc153D03c27b5e',
     factoryAddr: '0x7a5028BDa40e7B173C278C5342087826455ea25a'
+  },
+  // Sepolia
+  '11155111': {
+    nonfungiblePositionManagerAddr: '0x1238536071E1c677A632429e3655c799b22cDA52',
+    factoryAddr: '0x0227628f3F023bb0B980b67D528571c95c6DaC1c'
   }
 }

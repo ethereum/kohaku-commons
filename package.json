@@ -10,9 +10,11 @@
     "jest": "node runTests.js",
     "build": "tsc src/libs/deployless/deployless.ts -t es5",
     "prettier": "prettier --write 'contracts/**/*.sol'",
-    "lint:fix": "eslint ./src/** --ext .js,.jsx,.ts,.tsx --fix"
+    "lint:fix": "eslint ./src/** --ext .js,.jsx,.ts,.tsx --fix",
+    "check": "tsc --noEmit && echo 'FIXME: eslint is disabled here because there are too many issues.'"
   },
   "dependencies": {
+    "@corpus-core/colibri-stateless": "^1.1.11",
     "@lifi/types": "^17.7.1",
     "@metamask/eth-sig-util": "^8.2.0",
     "aes-js": "^3.1.2",
@@ -27,6 +29,8 @@
     "viem": "^2.33.3"
   },
   "peerDependencies": {
+    "viem": "2.33.2",
+    "@0xbow/privacy-pools-core-sdk": "0.1.22",
     "@ambire/signature-validator": "^1.0.3",
     "@ensdomains/eth-ens-namehash": "^2.0.15",
     "@ethersproject/abstract-signer": "^5.7.0",
@@ -39,7 +43,8 @@
     "react": "^18.1.0",
     "secp256k1": "^5.0.1",
     "url": "^0.11.0",
-    "validator": "^13.7.0"
+    "validator": "^13.7.0",
+    "@a16z/helios": "0.11.0"
   },
   "peerDependenciesMeta": {
     "@noble/hashes": {
@@ -62,6 +67,7 @@
     "@types/mocha": "^10.0.1",
     "@types/node": "^18.16.1",
     "@types/node-fetch": "^2.6.11",
+    "@types/react": "^18.1.0",
     "@types/ungap__structured-clone": "^1.2.0",
     "@types/validator": "^13.7.0",
     "@typescript-eslint/eslint-plugin": "5.5.0",

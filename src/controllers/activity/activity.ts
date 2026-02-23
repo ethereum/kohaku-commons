@@ -1,3 +1,4 @@
+import { zeroAddress } from 'viem'
 import { Account, AccountId } from '../../interfaces/account'
 import { Banner, BannerCategory, BannerType } from '../../interfaces/banner'
 import { Fetch } from '../../interfaces/fetch'
@@ -225,9 +226,17 @@ export class ActivityController extends EventEmitter {
     let filteredItems
 
     if (filters.chainId) {
-      filteredItems = this.#accountsOps[filters.account]?.[filters.chainId.toString()] || []
+      // Get account ops from both the active account and private account
+      const accountOps = this.#accountsOps[filters.account]?.[filters.chainId.toString()] || []
+      const privateAccountOps = this.#accountsOps[zeroAddress]?.[filters.chainId.toString()] || []
+      filteredItems = [...accountOps, ...privateAccountOps]
+      // Sort by timestamp in descending order
+      filteredItems.sort((a, b) => b.timestamp - a.timestamp)
     } else {
-      filteredItems = Object.values(this.#accountsOps[filters.account] || []).flat()
+      // Get account ops from both the active account and private account across all chains
+      const accountOps = Object.values(this.#accountsOps[filters.account] || []).flat()
+      const privateAccountOps = Object.values(this.#accountsOps[zeroAddress] || []).flat()
+      filteredItems = [...accountOps, ...privateAccountOps]
       // By default, #accountsOps are grouped by network and sorted in descending order.
       // However, when the network filter is omitted, #accountsOps from different networks are mixed,
       // requiring additional sorting to ensure they are also in descending order.
@@ -419,13 +428,24 @@ export class ActivityController extends EventEmitter {
         c.statuses.includes(accountOp.status as AccountOpStatus)
       )
 
+      // Check for Railgun or Privacy Pools withdrawal meta tags
+      const meta = accountOp.meta as any
+      const isRailgunWithdrawal = meta?.isRailgunWithdrawal === true
+      const isPrivacyPoolsWithdrawal = meta?.isPrivacyPoolsWithdrawal === true
+
+      // Customize title based on withdrawal type
+      let title = content?.title || 'Transaction successfully signed and sent!\nCheck it out on the block explorer!'
+      if (isRailgunWithdrawal) {
+        title = 'Railgun Withdrawal\nCheck it out on the block explorer!'
+      } else if (isPrivacyPoolsWithdrawal) {
+        title = 'Privacy Pools Withdrawal\nCheck it out on the block explorer!'
+      }
+
       return {
         id: accountOp.txnId || accountOp.identifiedBy.identifier,
         type: content?.type || 'success',
         category: content?.category || 'pending-to-be-confirmed-acc-op',
-        title:
-          content?.title ||
-          'Transaction successfully signed and sent!\nCheck it out on the block explorer!',
+        title,
         text: '',
         actions: [
           {
@@ -541,6 +561,15 @@ export class ActivityController extends EventEmitter {
                 // Don't update the current network account ops statuses,
                 // as the statuses are already updated in the previous calls.
                 if (accountOp.status !== AccountOpStatus.BroadcastedButNotConfirmed) return
+
+                // Skip PrivacyPoolsRelayer transactions as they have their own polling mechanism
+                // in the PrivacyPoolsController. Trying to fetch status for these would fail
+                // and cause unnecessary loading states.
+                if (accountOp.identifiedBy.type === 'PrivacyPoolsRelayer') return
+
+                // Skip ImportedAccount records as they are informational entries about account imports,
+                // not actual transactions that need status updates
+                if (accountOp.identifiedBy.type === 'ImportedAccount') return
 
                 shouldEmitUpdate = true
 
@@ -773,6 +802,56 @@ export class ActivityController extends EventEmitter {
     this.emitUpdate()
 
     await this.#storage.set('accountsOps', this.#accountsOps)
+  }
+
+  /**
+   * Update the status of a specific AccountOp by txnId.
+   * This is useful for external controllers (like PrivacyPoolsController) that need to
+   * update transaction statuses based on their own polling mechanisms.
+   */
+  async updateAccountOpStatus(
+    accountAddr: string,
+    chainId: bigint,
+    txnId: string,
+    status: AccountOpStatus
+  ): Promise<void> {
+    await this.#initialLoadPromise
+
+    // Check if account and chain exist
+    if (!this.#accountsOps[accountAddr]) return
+    if (!this.#accountsOps[accountAddr][chainId.toString()]) return
+
+    // Find the operation by txnId
+    const opIndex = this.#accountsOps[accountAddr][chainId.toString()].findIndex(
+      (accOp) => accOp.txnId === txnId
+    )
+
+    if (opIndex === -1) return
+
+    // Hide confirmed banners first if the new status is a confirmed status
+    if (CONFIRMED_STATUSES.includes(status)) {
+      this.hideBannersOfConfirmedAccountOps()
+    }
+
+    // Update the status by reference
+    const updatedOp = updateOpStatus(
+      this.#accountsOps[accountAddr][chainId.toString()][opIndex],
+      status
+    )
+
+    if (updatedOp) {
+      // Sync filtered data
+      await this.syncFilteredAccountsOps()
+
+      // Update banners
+      this.updateAccountOpBanners()
+
+      // Save to storage
+      await this.#storage.set('accountsOps', this.#accountsOps)
+
+      // Emit update
+      this.emitUpdate()
+    }
   }
 
   get broadcastedButNotConfirmed(): SubmittedAccountOp[] {

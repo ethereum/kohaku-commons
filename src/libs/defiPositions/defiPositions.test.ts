@@ -17,8 +17,15 @@ describe('DeFi positions', () => {
   const polygon = networks.find((n) => n.chainId === 137n)
   if (!polygon) throw new Error('unable to find polygon network in consts')
 
-  const providerEthereum = getRpcProvider(['https://invictus.ambire.com/ethereum'], 1n)
-  const providerPolygon = getRpcProvider(['https://invictus.ambire.com/polygon'], 137n)
+  const providerEthereum = getRpcProvider({
+    rpcUrls: ['https://invictus.ambire.com/ethereum'],
+    chainId: 1n
+  })
+
+  const providerPolygon = getRpcProvider({
+    rpcUrls: ['https://invictus.ambire.com/polygon'],
+    chainId: 137n
+  })
 
   describe('Uni V3', () => {
     test('Get uni v3 positions on Polygon', async () => {

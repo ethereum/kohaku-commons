@@ -2,6 +2,7 @@
 import { ethErrors } from 'eth-rpc-errors'
 import { getAddress, getBigInt } from 'ethers'
 
+import { buildSignUserRequest } from '../privacyPools/buildRequest'
 import EmittableError from '../../classes/EmittableError'
 import { Session } from '../../classes/session'
 import SwapAndBridgeError from '../../classes/SwapAndBridgeError'
@@ -538,6 +539,79 @@ export class RequestsController extends EventEmitter {
     if (type === 'intentRequest') {
       await this.#buildIntentUserRequest(params)
     }
+
+    if (type === 'privateDepositRequest') {
+      await this.#buildPrivacyPoolsUserRequest(params)
+    }
+
+    if (type === 'privateSendRequest') {
+      await this.#buildPrivacyPoolsUserRequest(params)
+    }
+
+    if (type === 'privateRagequitRequest') {
+      await this.#buildPrivacyPoolsUserRequest(params)
+    }
+
+    if (type === 'privateWithdrawRequest') {
+      await this.#buildPrivacyPoolsUserRequest(params)
+    }
+  }
+
+  async #buildPrivacyPoolsUserRequest({
+    txList,
+    actionExecutionType = 'open-action-window'
+  }: {
+    txList: { to: string; value: bigint; data: string }[]
+    actionExecutionType: ActionExecutionType
+  }) {
+    await this.initialLoadPromise
+    if (!this.#selectedAccount.account) return
+
+    const baseAcc = getBaseAccount(
+      this.#selectedAccount.account,
+      await this.#accounts.getOrFetchAccountOnChainState(
+        this.#selectedAccount.account.addr,
+        11155111n
+      ),
+      this.#keystore.getAccountKeys(this.#selectedAccount.account),
+      this.#networks.networks.find((net) => net.chainId === 11155111n)!
+    )
+    const userRequest = buildSignUserRequest({
+      txList,
+      accountAddr: this.#selectedAccount.account.addr,
+      chainId: 11155111n,
+      paymasterService: getAmbirePaymasterService(baseAcc, this.#relayerUrl)
+    })
+
+    if (!userRequest) {
+      this.emitError({
+        level: 'major',
+        message: 'Unexpected error while building private deposit request',
+        error: new Error(
+          'buildPrivateDepositUserRequest: bad parameters passed to buildPrivateDepositUserRequest'
+        )
+      })
+      return
+    }
+
+    await this.addUserRequests([userRequest], {
+      actionPosition: 'last',
+      actionExecutionType
+    })
+  }
+
+  async #buildPrivateSendUserRequest(params: any) {
+    // eslint-disable-next-line
+    console.log('buildPrivateSendUserRequest', params)
+    await this.initialLoadPromise
+    throw new Error('Not implemented')
+  }
+
+  async #buildPrivateRagequitUserRequest(params: any) {
+    // eslint-disable-next-line
+    console.log('buildPrivateRagequitUserRequest', params)
+    await this.initialLoadPromise
+    throw new Error('Not implemented')
   }
 
   async #buildUserRequestFromDAppRequest(

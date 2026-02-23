@@ -33,13 +33,34 @@ jobs:
       - name: Install NPM packages ♾️🕳️
         run: npm ci
 
+      - name: Check if SEED is configured
+        id: check-secret
+        env:
+          SEED: ${{ secrets.SEED }}
+        run: |
+          if [ -n "$SEED" ]; then
+            echo "run=true" >> $GITHUB_OUTPUT
+          else
+            echo "run=false" >> $GITHUB_OUTPUT
+          fi
+
       - name: Hardhat Tests 🧑‍🔬
+        if: steps.check-secret.outputs.run == 'true'
         env:
           SEED: ${{ secrets.SEED }}
         run: npm run hardhat
 
       - name: JEST Tests 🧑‍🔬
+        if: steps.check-secret.outputs.run == 'true'
         env:
           SEED: ${{ secrets.SEED }}
           REACT_APP_PIMLICO_API_KEY: ${{ secrets.REACT_APP_PIMLICO_API_KEY }}
         run: npm run jest
+
+  workflow-status:
+    name: Workflow status
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check workflow status
+        run: |
+          echo "Workflow completed. Unit tests run conditionally based on SEED secret availability."

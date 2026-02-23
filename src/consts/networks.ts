@@ -9,7 +9,9 @@ const networks: Network[] = [
     nativeAssetName: 'Ether',
     rpcUrls: ['https://invictus.ambire.com/ethereum'],
     selectedRpcUrl: 'https://invictus.ambire.com/ethereum',
-    rpcNoStateOverride: false,
+    consensusRpcUrl: 'http://testing.mainnet.beacon-api.nimbus.team/',
+    proverRpcUrl: 'https://mainnet1.colibri-proof.tech/',
+    rpcNoStateOverride: true,
     chainId: 1n,
     explorerUrl: 'https://etherscan.io',
     erc4337: { enabled: false, hasPaymaster: true, hasBundlerSupport: true },
@@ -23,7 +25,9 @@ const networks: Network[] = [
     feeOptions: { is1559: true },
     predefined: true,
     wrappedAddr: '0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2',
-    disableEstimateGas: true
+    disableEstimateGas: true,
+    rpcProvider: 'helios',
+    heliosCheckpoint: '0xe645d010dd9f2480e3b7a2e6632039c723378a7b5f9dd94f692dd61269b7f91d'
   },
   {
     name: 'Polygon',
@@ -62,7 +66,8 @@ const networks: Network[] = [
     nativeAssetName: 'Ether',
     rpcUrls: ['https://invictus.ambire.com/optimism'],
     selectedRpcUrl: 'https://invictus.ambire.com/optimism',
-    rpcNoStateOverride: false,
+    consensusRpcUrl: 'https://op-mainnet.operationsolarstorm.org',
+    rpcNoStateOverride: true,
     chainId: 10n,
     explorerUrl: 'https://optimistic.etherscan.io',
     erc4337: {
@@ -88,7 +93,8 @@ const networks: Network[] = [
     isOptimistic: true,
     predefined: true,
     disableEstimateGas: true,
-    wrappedAddr: '0x4200000000000000000000000000000000000006'
+    wrappedAddr: '0x4200000000000000000000000000000000000006',
+    rpcProvider: 'helios'
   },
   {
     name: 'Avalanche',
@@ -158,7 +164,8 @@ const networks: Network[] = [
     nativeAssetName: 'Ether',
     rpcUrls: ['https://invictus.ambire.com/base'],
     selectedRpcUrl: 'https://invictus.ambire.com/base',
-    rpcNoStateOverride: false,
+    consensusRpcUrl: 'https://base.operationsolarstorm.org',
+    rpcNoStateOverride: true,
     chainId: 8453n,
     explorerUrl: 'https://basescan.org',
     erc4337: {
@@ -183,7 +190,8 @@ const networks: Network[] = [
     },
     predefined: true,
     disableEstimateGas: true,
-    wrappedAddr: '0x4200000000000000000000000000000000000006'
+    wrappedAddr: '0x4200000000000000000000000000000000000006',
+    rpcProvider: 'helios'
   },
   {
     name: 'Scroll',

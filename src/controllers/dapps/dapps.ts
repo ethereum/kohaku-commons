@@ -51,7 +51,8 @@ export class DappsController extends EventEmitter {
           icon: curr.icon,
           isConnected: 'isConnected' in curr ? curr.isConnected : false,
           chainId: 'chainId' in curr ? curr.chainId : 1,
-          favorite: 'favorite' in curr ? curr.favorite : false
+          favorite: 'favorite' in curr ? curr.favorite : false,
+          account: 'account' in curr ? curr.account : undefined
         })
       }
 
@@ -165,7 +166,8 @@ export class DappsController extends EventEmitter {
         isConnected: dapp.isConnected,
         favorite: dapp.favorite,
         grantedPermissionId: dapp.grantedPermissionId,
-        grantedPermissionAt: dapp.grantedPermissionAt
+        grantedPermissionAt: dapp.grantedPermissionAt,
+        account: dapp.account
       })
       return
     }

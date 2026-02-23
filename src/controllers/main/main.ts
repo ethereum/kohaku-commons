@@ -2,6 +2,7 @@
 import { ethErrors } from 'eth-rpc-errors'
 import { getAddress } from 'ethers'
 
+import { BrowserProvider } from '../../services/provider/BrowserProvider'
 import AmbireAccount7702 from '../../../contracts/compiled/AmbireAccount7702.json'
 import EmittableError from '../../classes/EmittableError'
 import ExternalSignerError from '../../classes/ExternalSignerError'
@@ -78,6 +79,8 @@ import { RequestsController } from '../requests/requests'
 import { SelectedAccountController } from '../selectedAccount/selectedAccount'
 import {
   SIGN_ACCOUNT_OP_MAIN,
+  SIGN_ACCOUNT_OP_PRIVACY_POOLS,
+  SIGN_ACCOUNT_OP_RAILGUN,
   SIGN_ACCOUNT_OP_SWAP,
   SIGN_ACCOUNT_OP_TRANSFER,
   SignAccountOpType
@@ -88,6 +91,8 @@ import { StorageController } from '../storage/storage'
 import { SwapAndBridgeController } from '../swapAndBridge/swapAndBridge'
 import { TransactionManagerController } from '../transaction/transactionManager'
 import { TransferController } from '../transfer/transfer'
+import { PrivacyPoolsController } from '../privacyPools/privacyPools'
+import { RailgunController } from '../railgun/railgun'
 
 const STATUS_WRAPPED_METHODS = {
   removeAccount: 'INITIAL',
@@ -155,6 +160,10 @@ export class MainController extends EventEmitter {
 
   transfer: TransferController
 
+  privacyPools: PrivacyPoolsController
+
+  railgun: RailgunController
+
   signAccountOp: SignAccountOpController | null = null
 
   signAccOpInitError: string | null = null
@@ -207,6 +216,11 @@ export class MainController extends EventEmitter {
     fetch,
     relayerUrl,
     velcroUrl,
+    privacyPoolsAspUrl,
+    privacyPoolsRelayerUrl,
+    railgunRelayerUrl,
+    alchemyApiKey,
+    hypersyncApiKey,
     featureFlags,
     swapApiKey,
     keystoreSigners,
@@ -219,6 +233,11 @@ export class MainController extends EventEmitter {
     fetch: Fetch
     relayerUrl: string
     velcroUrl: string
+    privacyPoolsAspUrl: string
+    privacyPoolsRelayerUrl: string
+    railgunRelayerUrl: string
+    alchemyApiKey: string
+    hypersyncApiKey: string
     featureFlags: Partial<FeatureFlags>
     swapApiKey: string
     keystoreSigners: Partial<{ [key in Key['type']]: KeystoreSignerType }>
@@ -238,9 +257,7 @@ export class MainController extends EventEmitter {
     this.keystore = new KeystoreController(platform, this.storage, keystoreSigners, windowManager)
     this.#externalSignerControllers = externalSignerControllers
     this.networks = new NetworksController({
-      defaultNetworksMode: this.featureFlags.isFeatureEnabled('testnetMode')
-        ? 'testnet'
-        : 'mainnet',
+      defaultNetworksMode: 'testnet',
       storage: this.storage,
       fetch,
       relayerUrl,
@@ -365,6 +382,7 @@ export class MainController extends EventEmitter {
         await this.setContractsDeployedToTrueIfDeployed(network)
       }
     )
+
     this.swapAndBridge = new SwapAndBridgeController({
       accounts: this.accounts,
       keystore: this.keystore,
@@ -481,7 +499,7 @@ export class MainController extends EventEmitter {
             externalSignerControllers: this.#externalSignerControllers,
             relayerUrl,
             fetch: this.fetch,
-            onAddAccountsSuccessCallback: async () => {}
+            onAddAccountsSuccessCallback: async () => { }
           }),
           this.keystore,
           async () => {
@@ -490,6 +508,37 @@ export class MainController extends EventEmitter {
         )
       }
     })
+
+    this.privacyPools = new PrivacyPoolsController(
+      this.keystore,
+      this.accounts,
+      this.networks,
+      this.providers,
+      this.selectedAccount,
+      this.portfolio,
+      this.activity,
+      this.#externalSignerControllers,
+      relayerUrl,
+      privacyPoolsAspUrl,
+      privacyPoolsRelayerUrl,
+      alchemyApiKey,
+      hypersyncApiKey,
+      this.fetch
+    )
+
+    this.railgun = new RailgunController(
+      this.keystore,
+      this.accounts,
+      this.networks,
+      this.providers,
+      this.selectedAccount,
+      this.portfolio,
+      this.activity,
+      this.storage,
+      this.#externalSignerControllers,
+      railgunRelayerUrl,
+      this.fetch
+    )
   }
 
   /**
@@ -574,7 +623,7 @@ export class MainController extends EventEmitter {
     this.isOffline = false
     // call closeActionWindow while still on the currently selected account to allow proper
     // state cleanup of the controllers like actionsCtrl, signAccountOpCtrl, signMessageCtrl...
-    if (this.requests.actions?.currentAction?.type !== 'switchAccount') {
+    if (this.requests.actions?.currentAction?.type !== 'switchAccount' && this.requests.actions?.currentAction?.type !== 'dappRequest') {
       await this.requests.actions.closeActionWindow()
     }
     const swapAndBridgeSigningAction = this.requests.actions.visibleActionsQueue.find(
@@ -586,7 +635,14 @@ export class MainController extends EventEmitter {
     await this.selectedAccount.setAccount(accountToSelect)
     this.swapAndBridge.reset()
     this.transfer.resetForm()
-    await this.dapps.broadcastDappSessionEvent('accountsChanged', [toAccountAddr])
+    // TODO: Decide if we want to use this func as a place where users can change
+    // their selected account for a particular dapp. Essentially - when the
+    // user changes the selected account in the wallet UI when on a dapp-connected
+    // site, should the UI allow that and change the dapp account (perhaps with a popup)
+    // or should we block that action? For now I'll block it and make it so that
+    // the user can change their selected account in the wallet, but the dapp
+    // will not be notified of that change unless the user reconnects the dapp.
+    await this.handleBroadcastAccountsChanged()
     // forceEmitUpdate to update the getters in the FE state of the ctrl
     await this.forceEmitUpdate()
     await this.requests.actions.forceEmitUpdate()
@@ -700,6 +756,34 @@ export class MainController extends EventEmitter {
     this.forceEmitUpdate()
   }
 
+  /**
+   * Broadcasts an 'unlock' event to all connected dapps with each dapp's associated account.
+   */
+  async handleBroadcastUnlock() {
+    for (const session of Object.values(this.dapps.dappSessions)) {
+      const dapp = this.dapps.getDapp(session.id)
+      if (!dapp) continue
+
+      const account = dapp.account
+      if (!account) continue
+      await this.dapps.broadcastDappSessionEvent('unlock', [account], session.id)
+    }
+  }
+
+  /**
+   * Broadcasts an 'accountsChanged' event to all connected dapps with each dapp's associated account.
+   */
+  async handleBroadcastAccountsChanged() {
+    for (const session of Object.values(this.dapps.dappSessions)) {
+      const dapp = this.dapps.getDapp(session.id)
+      if (!dapp) continue
+
+      const account = dapp.account
+      if (!account) continue
+      await this.dapps.broadcastDappSessionEvent('accountsChanged', [account], session.id)
+    }
+  }
+
   async handleSignAndBroadcastAccountOp(type: SignAccountOpType) {
     if (this.statuses.signAndBroadcastAccountOp !== 'INITIAL') {
       const message =
@@ -729,6 +813,10 @@ export class MainController extends EventEmitter {
       signAccountOp = this.signAccountOp
     } else if (type === SIGN_ACCOUNT_OP_SWAP) {
       signAccountOp = this.swapAndBridge.signAccountOpController
+    } else if (type === SIGN_ACCOUNT_OP_PRIVACY_POOLS) {
+      signAccountOp = this.privacyPools.signAccountOpController
+    } else if (type === SIGN_ACCOUNT_OP_RAILGUN) {
+      signAccountOp = this.railgun.signAccountOpController
     } else {
       signAccountOp = this.transfer.signAccountOpController
     }
@@ -749,7 +837,7 @@ export class MainController extends EventEmitter {
       if (!wasAlreadySigned) {
         if (!signAccountOp) {
           const message =
-            'The signing process was not initialized as expected. Please try again later or contact Ambire support if the issue persists.'
+            'The signing process was not initialized as expected. Please try again later or contact Kohaku support if the issue persists.'
 
           throw new EmittableError({ level: 'major', message })
         }
@@ -792,8 +880,7 @@ export class MainController extends EventEmitter {
             level: 'major',
             message:
               error.message ||
-              `Unknown error occurred while ${
-                !hasSigned ? 'signing the transaction' : 'broadcasting the transaction'
+              `Unknown error occurred while ${!hasSigned ? 'signing the transaction' : 'broadcasting the transaction'
               }`,
             error
           })
@@ -932,10 +1019,10 @@ export class MainController extends EventEmitter {
       const stateOverride =
         accountOp.calls.length > 1 && isBasicAccount(account, state)
           ? {
-              [account.addr]: {
-                code: AmbireAccount7702.binRuntime
-              }
+            [account.addr]: {
+              code: AmbireAccount7702.binRuntime
             }
+          }
           : undefined
       const { tokens, nfts } = await debugTraceCall(
         account,
@@ -961,9 +1048,9 @@ export class MainController extends EventEmitter {
           [network],
           accountOpsForSimulation
             ? {
-                accountOps: accountOpsForSimulation,
-                states: await this.accounts.getOrFetchAccountStates(account.addr)
-              }
+              accountOps: accountOpsForSimulation,
+              states: await this.accounts.getOrFetchAccountStates(account.addr)
+            }
             : undefined,
           { forceUpdate: true }
         )
@@ -999,7 +1086,7 @@ export class MainController extends EventEmitter {
       !accountAddr || !chainId || !this.accounts.accountStates?.[accountAddr]?.[chainId.toString()]
     if (isAccountStateStillMissing) {
       const message =
-        'Unable to sign the message. During the preparation step, required account data failed to get received. Please try again later or contact Ambire support.'
+        'Unable to sign the message. During the preparation step, required account data failed to get received. Please try again later or contact Kohaku support.'
       const error = new Error(
         `The account state of ${accountAddr} is missing for the network with id ${chainId}.`
       )
@@ -1032,7 +1119,7 @@ export class MainController extends EventEmitter {
       const ledgerCtrl = this.#externalSignerControllers.ledger
       if (!ledgerCtrl) {
         const message =
-          'Could not initialize connection with your Ledger device. Please try again later or contact Ambire support.'
+          'Could not initialize connection with your Ledger device. Please try again later or contact Kohaku support.'
         throw new EmittableError({ message, level: 'major', error: new Error(message) })
       }
 
@@ -1082,7 +1169,7 @@ export class MainController extends EventEmitter {
 
       if (!trezorCtrl) {
         const message =
-          'Could not initialize connection with your Trezor device. Please try again later or contact Ambire support.'
+          'Could not initialize connection with your Trezor device. Please try again later or contact Kohaku support.'
         throw new EmittableError({ message, level: 'major', error: new Error(message) })
       }
 
@@ -1115,7 +1202,7 @@ export class MainController extends EventEmitter {
       const latticeCtrl = this.#externalSignerControllers.lattice
       if (!latticeCtrl) {
         const message =
-          'Could not initialize connection with your Lattice1 device. Please try again later or contact Ambire support.'
+          'Could not initialize connection with your Lattice1 device. Please try again later or contact Kohaku support.'
         throw new EmittableError({ message, level: 'major', error: new Error(message) })
       }
 
@@ -1253,7 +1340,7 @@ export class MainController extends EventEmitter {
       // However, even if we don't trigger an update here, it's not a big problem,
       // as the account state will be updated anyway, and its update will be very recent.
       !this.accounts.areAccountStatesLoading && this.selectedAccount.account?.addr
-        ? this.accounts.updateAccountState(this.selectedAccount.account.addr, 'pending', chainIds)
+        ? this.accounts.updateAccountState(this.selectedAccount.account.addr, 'latest', chainIds)
         : Promise.resolve(),
       // `updateSelectedAccountPortfolio` doesn't rely on `withStatus` validation internally,
       // as the PortfolioController already exposes flags that are highly sufficient for the UX.
@@ -1337,9 +1424,9 @@ export class MainController extends EventEmitter {
       networks,
       accountOpsToBeSimulatedByNetwork
         ? {
-            accountOps: accountOpsToBeSimulatedByNetwork,
-            states: await this.accounts.getOrFetchAccountStates(this.selectedAccount.account.addr)
-          }
+          accountOps: accountOpsToBeSimulatedByNetwork,
+          states: await this.accounts.getOrFetchAccountStates(this.selectedAccount.account.addr)
+        }
         : undefined,
       { forceUpdate, maxDataAgeMs }
     )
@@ -1356,7 +1443,7 @@ export class MainController extends EventEmitter {
       const userRequestIndex = this.requests.userRequests.findIndex((r) => r.id === requestId)
       const userRequest = this.requests.userRequests[userRequestIndex] as SignUserRequest
       if (userRequest.action.kind === 'calls') {
-        ;(userRequest.action as Calls).calls = (userRequest.action as Calls).calls.filter(
+        ; (userRequest.action as Calls).calls = (userRequest.action as Calls).calls.filter(
           (c) => c.id !== callId
         )
 
@@ -1689,7 +1776,11 @@ export class MainController extends EventEmitter {
       const senderAddr = BROADCAST_OPTIONS.byOtherEOA
         ? accountOp.gasFeePayment.paidBy
         : accountOp.accountAddr
-      const nonce = await provider.getTransactionCount(senderAddr).catch((e) => e)
+      // We need the latest nonce because Helios might be lagging behind the execution RPC
+      // @TODO maybe rework fallback logic
+      const nonceProvider =
+        provider instanceof BrowserProvider ? provider.getFallbackProvider() : provider
+      const nonce = await nonceProvider.getTransactionCount(senderAddr).catch((e) => e)
 
       // @precaution
       if (nonce instanceof Error) {
@@ -1721,13 +1812,17 @@ export class MainController extends EventEmitter {
           ? accountOp.calls.length
           : 1
         if (txnLength > 1) signAccountOp.update({ signedTransactionsCount: 0 })
+        // We need the latest nonce because Helios might be lagging behind the execution RPC
+        // @TODO maybe rework fallback logic
+        const broadcastProvider =
+          provider instanceof BrowserProvider ? provider.getFallbackProvider() : provider
         for (let i = 0; i < txnLength; i++) {
           const currentNonce = nonce + i
           const rawTxn = await buildRawTransaction(
             account,
             accountOp,
             accountState,
-            provider,
+            broadcastProvider,
             network,
             currentNonce,
             accountOp.gasFeePayment.broadcastOption,
@@ -1742,15 +1837,19 @@ export class MainController extends EventEmitter {
           }
           if (accountOp.gasFeePayment.broadcastOption === BROADCAST_OPTIONS.delegation) {
             multipleTxnsBroadcastRes.push({
-              hash: await provider.send('eth_sendRawTransaction', [signedTxn])
+              hash: await broadcastProvider.send('eth_sendRawTransaction', [signedTxn])
             })
           } else {
-            multipleTxnsBroadcastRes.push(await provider.broadcastTransaction(signedTxn))
+            multipleTxnsBroadcastRes.push(await broadcastProvider.broadcastTransaction(signedTxn))
           }
           if (txnLength > 1) signAccountOp.update({ signedTransactionsCount: i + 1 })
 
           // send the txn to the relayer if it's an EOA sending for itself
-          if (accountOp.gasFeePayment.broadcastOption !== BROADCAST_OPTIONS.byOtherEOA) {
+          // Skip relayer for Railgun operations as they don't need relayer recording
+          if (
+            accountOp.gasFeePayment.broadcastOption !== BROADCAST_OPTIONS.byOtherEOA &&
+            type !== SIGN_ACCOUNT_OP_RAILGUN
+          ) {
             this.callRelayer(`/v2/eoaSubmitTxn/${accountOp.chainId}`, 'POST', {
               rawTxn: signedTxn
             }).catch((e: any) => {
@@ -1859,6 +1958,7 @@ export class MainController extends EventEmitter {
     }
     // Smart account, the Relayer way
     else {
+      console.log('broadcasting with relayer, gasLimit', accountOp.gasFeePayment!.simulatedGasLimit)
       try {
         const body = {
           gasLimit: Number(accountOp.gasFeePayment!.simulatedGasLimit),
@@ -2001,17 +2101,39 @@ export class MainController extends EventEmitter {
       this.transfer.resetForm()
     }
 
+    if (type === SIGN_ACCOUNT_OP_PRIVACY_POOLS) {
+      if (this.privacyPools.shouldTrackLatestBroadcastedAccountOp) {
+        this.privacyPools.latestBroadcastedAccountOp = submittedAccountOp
+      }
+
+      // Pass false to keep SignAccountOpController alive during tracking
+      // This prevents stale state issues on subsequent deposits
+      // The SignAccountOpController will be destroyed when user navigates away
+      this.privacyPools.resetForm(false)
+    }
+
+    if (type === SIGN_ACCOUNT_OP_RAILGUN) {
+      if (this.railgun.shouldTrackLatestBroadcastedAccountOp) {
+        this.railgun.latestBroadcastedToken = this.railgun.selectedToken
+        this.railgun.latestBroadcastedAccountOp = submittedAccountOp
+      }
+
+      // Pass false to keep SignAccountOpController alive during tracking
+      // This prevents stale state issues on subsequent deposits
+      // The SignAccountOpController will be destroyed when user navigates away
+      this.railgun.resetForm()
+    }
+
     await this.#notificationManager.create({
       title:
         // different count can happen only on isBasicAccountBroadcastingMultiple
         submittedAccountOp.calls.length === accountOp.calls.length
           ? 'Done!'
           : 'Partially submitted',
-      message: `${
-        isBasicAccountBroadcastingMultiple
-          ? `${submittedAccountOp.calls.length}/${accountOp.calls.length} transactions were`
-          : 'The transaction was'
-      } successfully signed and broadcast to the network.`
+      message: `${isBasicAccountBroadcastingMultiple
+        ? `${submittedAccountOp.calls.length}/${accountOp.calls.length} transactions were`
+        : 'The transaction was'
+        } successfully signed and broadcast to the network.`
     })
 
     // reset the fee payer key
@@ -2074,11 +2196,11 @@ export class MainController extends EventEmitter {
         }
       } else if (originalMessage.includes('Failed to fetch') && isRelayer) {
         message =
-          'Currently, the Ambire relayer seems to be down. Please try again a few moments later or broadcast with an EOA account'
+          'Currently, the Kohaku relayer seems to be down. Please try again a few moments later or broadcast with an EOA account'
       } else if (originalMessage.includes('user nonce') && isRelayer) {
         if (this.signAccountOp) {
           this.accounts
-            .updateAccountState(this.signAccountOp.accountOp.accountAddr, 'pending', [
+            .updateAccountState(this.signAccountOp.accountOp.accountAddr, 'latest', [
               this.signAccountOp.accountOp.chainId
             ])
             .then(() => this.signAccountOp?.simulate())

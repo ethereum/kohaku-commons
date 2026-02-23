@@ -167,11 +167,11 @@ export class NetworksController extends EventEmitter {
       }, {} as { [key: string]: Network })
       this.#networks = finalNetworks
       this.emitUpdate()
+    } else {
+      finalNetworks = Object.fromEntries(
+        Object.values(networksInStorage).map((network) => [network.chainId.toString(), network])
+      )
     }
-
-    finalNetworks = Object.fromEntries(
-      Object.values(networksInStorage).map((network) => [network.chainId.toString(), network])
-    )
 
     if (this.defaultNetworksMode === 'mainnet') {
       // Step 4: Merge the networks from the Relayer

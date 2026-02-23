@@ -9,7 +9,6 @@ import {
   hexlify,
   Interface,
   isHexString,
-  JsonRpcProvider,
   keccak256,
   toBeHex,
   toNumber,
@@ -19,6 +18,7 @@ import {
 
 import { MessageTypes, SignTypedDataVersion, TypedDataUtils } from '@metamask/eth-sig-util'
 
+import { RPCProvider } from 'interfaces/provider'
 import UniversalSigValidator from '../../../contracts/compiled/UniversalSigValidator.json'
 import { EIP7702Auth } from '../../consts/7702'
 import { PERMIT_2_ADDRESS, UNISWAP_UNIVERSAL_ROUTERS } from '../../consts/addresses'
@@ -339,7 +339,7 @@ export function mapSignatureV(sigRaw: string) {
 // Either `message` or `typedData` must be provided - never both.
 type Props = {
   network: Network
-  provider: JsonRpcProvider
+  provider: RPCProvider
   signer: string
   signature: string | Uint8Array
 } & (

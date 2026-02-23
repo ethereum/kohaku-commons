@@ -42,8 +42,8 @@ const polygon = networks.find((x) => x.chainId === 137n)
 
 if (!ethereum || !polygon) throw new Error('Failed to find ethereum in networks')
 
-const provider = getRpcProvider(ethereum.rpcUrls, ethereum.chainId)
-const polygonProvider = getRpcProvider(polygon.rpcUrls, polygon.chainId)
+const provider = getRpcProvider(ethereum)
+const polygonProvider = getRpcProvider(polygon)
 const PLACEHOLDER_RECIPIENT = '0xc4A6bB5139123bD6ba0CF387828a9A3a73EF8D1e'
 const PLACEHOLDER_SELECTED_ACCOUNT: Account = {
   addr: '0xC2E6dFcc2C6722866aD65F211D5757e1D2879337',
@@ -68,7 +68,7 @@ const polygonPortfolio = new Portfolio(fetch, polygonProvider, polygon, velcroUr
 let transferController: TransferController
 
 const providers = Object.fromEntries(
-  networks.map((network) => [network.chainId, getRpcProvider(network.rpcUrls, network.chainId)])
+  networks.map((network) => [network.chainId, getRpcProvider(network)])
 )
 
 let providersCtrl: ProvidersController

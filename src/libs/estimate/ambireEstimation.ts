@@ -7,6 +7,7 @@ import { EOA_SIMULATION_NONCE } from '../../consts/deployless'
 import { AccountOnchainState } from '../../interfaces/account'
 import { Network } from '../../interfaces/network'
 import { RPCProvider } from '../../interfaces/provider'
+import { BrowserProvider } from '../../services/provider/BrowserProvider'
 import { getEoaSimulationStateOverride } from '../../utils/simulationStateOverride'
 import { getAccountDeployParams } from '../account/account'
 import { BaseAccount } from '../account/BaseAccount'
@@ -56,7 +57,29 @@ export async function ambireEstimateGas(
   nativeToCheck: string[]
 ): Promise<AmbireEstimation | Error> {
   const account = baseAcc.getAccount()
-  const deploylessEstimator = fromDescriptor(provider, Estimation, !network.rpcNoStateOverride)
+
+  // Bypass Helios for estimations
+  // @TODO this should be removed when Helios supports state overrides
+  let estimationProvider = provider
+  if (provider instanceof BrowserProvider) {
+    estimationProvider = provider.getFallbackProvider()
+  }
+  
+  const isStillPureEoa = accountState.isEOA && !accountState.isSmarterEoa
+  // For pure EOAs, we need state override for spoof signatures, so we force supportStateOverride to true
+  // This ensures stateOverrideSupported is set to true in the constructor.
+  // If the RPC doesn't actually support it, we'll catch the error and fallback gracefully.
+  const supportStateOverride = isStillPureEoa ? true : !network.rpcNoStateOverride
+  
+  // Use 'pending' blockTag only for Ethereum mainnet (chainId === 1n)
+  // Use 'latest' for all other networks for better RPC compatibility
+  const blockTag = network.chainId === 1n ? 'pending' : 'latest'
+  
+  const deploylessEstimator = fromDescriptor(
+    estimationProvider,
+    Estimation,
+    supportStateOverride
+  )
 
   // only the activator call is added here as there are cases where it's needed
   const calls = [...op.calls.map(toSingletonCall)]
@@ -64,7 +87,6 @@ export async function ambireEstimateGas(
     calls.push(getActivatorCall(op.accountAddr))
   }
 
-  const isStillPureEoa = accountState.isEOA && !accountState.isSmarterEoa
   const checkInnerCallsArgs = [
     account.addr,
     ...getAccountDeployParams(account),
@@ -82,16 +104,58 @@ export async function ambireEstimateGas(
     nativeToCheck,
     network.isOptimistic ? OPTIMISTIC_ORACLE : ZeroAddress
   ]
-  const ambireEstimation = await deploylessEstimator
-    .call('estimate', checkInnerCallsArgs, {
-      from: DEPLOYLESS_SIMULATION_FROM,
-      blockTag: 'pending', // there's no reason to do latest
-      mode: isStillPureEoa ? DeploylessMode.StateOverride : DeploylessMode.Detect,
-      stateToOverride: isStillPureEoa ? getEoaSimulationStateOverride(account.addr) : null
-    })
-    .catch(getHumanReadableEstimationError)
+  
+  // For pure EOAs, we need state override for simulation with spoof signatures.
+  // We ALWAYS try StateOverride mode first for pure EOAs, regardless of network.rpcNoStateOverride,
+  // because we've already forced supportStateOverride: true in the initialization.
+  // If the RPC doesn't actually support it, we'll catch the error and fallback gracefully.
+  let ambireEstimation
+  if (isStillPureEoa) {
+    // Try with StateOverride mode first for pure EOAs (required for spoof signatures)
+    // We ignore network.rpcNoStateOverride because:
+    // 1. We've already initialized with supportStateOverride: true
+    // 2. The RPC might actually support it even if the network config says it doesn't
+    // 3. We need state override for spoof signatures to work
+    try {
+      ambireEstimation = await deploylessEstimator.call('estimate', checkInnerCallsArgs, {
+        from: DEPLOYLESS_SIMULATION_FROM,
+        blockTag,
+        mode: DeploylessMode.StateOverride,
+        stateToOverride: getEoaSimulationStateOverride(account.addr)
+      })
+    } catch (error: any) {
+      // For any error with StateOverride mode, fallback to Detect mode
+      // This handles cases where:
+      // 1. State override is explicitly not supported by the RPC
+      // 2. The RPC call fails for any other reason (like require(false) revert)
+      try {
+        ambireEstimation = await deploylessEstimator.call('estimate', checkInnerCallsArgs, {
+          from: DEPLOYLESS_SIMULATION_FROM,
+          blockTag,
+          mode: DeploylessMode.Detect,
+          stateToOverride: null
+        })
+      } catch (fallbackError: any) {
+        ambireEstimation = getHumanReadableEstimationError(fallbackError)
+      }
+    }
+  } else {
+    // For smart accounts, use Detect mode
+    try {
+      ambireEstimation = await deploylessEstimator.call('estimate', checkInnerCallsArgs, {
+        from: DEPLOYLESS_SIMULATION_FROM,
+        blockTag,
+        mode: DeploylessMode.Detect,
+        stateToOverride: null
+      })
+    } catch (error: any) {
+      ambireEstimation = getHumanReadableEstimationError(error)
+    }
+  }
 
-  if (ambireEstimation instanceof Error) return ambireEstimation
+  if (ambireEstimation instanceof Error) {
+    return ambireEstimation
+  }
 
   const [
     [
@@ -114,7 +178,9 @@ export async function ambireEstimateGas(
     feeTokens.find((token) => token.address === ZeroAddress && !token.flags.onGasTank)?.amount
   )
 
-  if (ambireEstimationError) return ambireEstimationError
+  if (ambireEstimationError) {
+    return ambireEstimationError
+  }
 
   // if there's a nonce discrepancy, it means the portfolio simulation
   // will fail so we need to update the account state and the portfolio

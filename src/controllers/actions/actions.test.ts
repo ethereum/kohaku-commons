@@ -140,7 +140,7 @@ describe('Actions Controller', () => {
     }
   ]
   const providers = Object.fromEntries(
-    networks.map((network) => [network.chainId, getRpcProvider(network.rpcUrls, network.chainId)])
+    networks.map((network) => [network.chainId, getRpcProvider(network)])
   )
 
   let providersCtrl: ProvidersController

@@ -13,7 +13,14 @@ import { safeTokenAmountAndNumberMultiplication } from '../../utils/numbers/form
 export const SIGN_ACCOUNT_OP_MAIN = 'signAccountOpMain'
 export const SIGN_ACCOUNT_OP_SWAP = 'signAccountOpSwap'
 export const SIGN_ACCOUNT_OP_TRANSFER = 'signAccountOpTransfer'
-export type SignAccountOpType = 'signAccountOpMain' | 'signAccountOpSwap' | 'signAccountOpTransfer'
+export const SIGN_ACCOUNT_OP_PRIVACY_POOLS = 'signAccountOpPrivacyPools'
+export const SIGN_ACCOUNT_OP_RAILGUN = 'signAccountOpRailgun'
+export type SignAccountOpType =
+  | 'signAccountOpMain'
+  | 'signAccountOpSwap'
+  | 'signAccountOpTransfer'
+  | 'signAccountOpPrivacyPools'
+  | 'signAccountOpRailgun'
 
 function getFeeSpeedIdentifier(
   option: FeePaymentOption,

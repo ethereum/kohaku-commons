@@ -1,25 +1,30 @@
-import { JsonRpcProvider, Network } from 'ethers'
+import { JsonRpcProvider, Network, Provider } from 'ethers'
 
-import { Network as NetworkInterface } from '../../interfaces/network'
+import { Network as NetworkConfig, RpcProviderKind } from '../../interfaces/network'
+import { BrowserProvider } from './BrowserProvider'
+import {
+  ColibriRpcProvider,
+  ColibriRpcProviderOptions,
+  isColibriSupportedChain
+} from './ColibriRpcProvider'
+import { HeliosEthersProvider } from './HeliosEthersProvider'
 
-interface ProviderOptions {
-  batchMaxCount: number
+export type MinNetworkConfig = Omit<Partial<NetworkConfig>, 'chainId'> & {
+  rpcUrls: string[]
+  chainId?: bigint | number
 }
 
-const getRpcProvider = (
-  rpcUrls: NetworkInterface['rpcUrls'],
-  chainId?: bigint | number,
-  selectedRpcUrl?: string,
-  options?: ProviderOptions
-) => {
-  if (!rpcUrls.length) {
+export type GetRpcProviderConfig = MinNetworkConfig & ColibriRpcProviderOptions
+
+export function getRpcProvider (config: GetRpcProviderConfig, forceBypassHelios: boolean = false) {
+  if (!config.rpcUrls.length) {
     throw new Error('rpcUrls must be a non-empty array')
   }
 
-  let rpcUrl = rpcUrls[0]
+  let rpcUrl = config.rpcUrls[0]
 
-  if (selectedRpcUrl) {
-    const prefUrl = rpcUrls.find((u) => u === selectedRpcUrl)
+  if (config.selectedRpcUrl) {
+    const prefUrl = config.rpcUrls.find((u) => u === config.selectedRpcUrl)
     if (prefUrl) rpcUrl = prefUrl
   }
 
@@ -27,15 +32,54 @@ const getRpcProvider = (
     throw new Error('Invalid RPC URL provided')
   }
 
-  if (chainId) {
-    const staticNetwork = Network.from(Number(chainId))
+  let staticNetwork: Network | undefined
 
-    if (staticNetwork) {
-      return new JsonRpcProvider(rpcUrl, staticNetwork, { staticNetwork, ...options })
-    }
+  if (config.chainId) {
+    staticNetwork = Network.from(Number(config.chainId))
   }
 
-  return new JsonRpcProvider(rpcUrl)
+  const providerKind = forceBypassHelios ? 'rpc' : ( config.rpcProvider ?? 'rpc' )
+  let provider: JsonRpcProvider | BrowserProvider | ColibriRpcProvider 
+  switch (providerKind) {
+    case 'rpc':
+      provider = new JsonRpcProvider(rpcUrl, staticNetwork, {
+        staticNetwork,
+        batchMaxCount: config.batchMaxCount
+      })
+      break
+
+    case 'helios':
+      if (!staticNetwork) {
+        const advice = config.chainId === undefined ? ' (likely fix: specify chainId)' : ''
+  
+        throw new Error(`Cannot use Helios without staticNetwork${advice}`)
+      }
+      const heliosProvider = new HeliosEthersProvider(config, rpcUrl, staticNetwork)
+      provider = new BrowserProvider(heliosProvider, rpcUrl)
+      break
+
+    case 'colibri':
+      if (!config.chainId || !isColibriSupportedChain(config.chainId)) {
+        throw new Error(`Colibri is not supported for chain ${config.chainId}`)
+      }
+      const proverRpcUrl = config.proverRpcUrl 
+      const colibriOverrides =
+        proverRpcUrl && proverRpcUrl.trim()
+          ? { ...(config.colibri || {}), prover: [proverRpcUrl.trim()] }
+          : config.colibri
+  
+      provider = new ColibriRpcProvider(rpcUrl, config.chainId, {
+        batchMaxCount: config.batchMaxCount,
+        colibri: colibriOverrides
+      })
+      break
+
+    default:
+      throw new Error(`Invalid provider kind: ${providerKind}`)
+  }
+
+  ;(provider as any).rpcProvider = providerKind
+  return provider
 }
 
-export { getRpcProvider }
+

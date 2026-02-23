@@ -31,7 +31,7 @@ import { AccountPickerController, DEFAULT_PAGE, DEFAULT_PAGE_SIZE } from './acco
 const windowManager = mockWindowManager().windowManager
 
 const providers = Object.fromEntries(
-  networks.map((network) => [network.chainId, getRpcProvider(network.rpcUrls, network.chainId)])
+  networks.map((network) => [network.chainId, getRpcProvider(network)])
 )
 
 const key1to11BasicAccPublicAddresses = Array.from(
