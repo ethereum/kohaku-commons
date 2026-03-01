@@ -48,7 +48,7 @@ const testnetNetworks: Network[] = [
     predefined: true,
     rpcProvider: resolveRpcProvider(),
     heliosCheckpoint:
-      HELIOS_CHECKPOINT || '0x178bea570e6aff265cf670b1b65be4479dca2ed9c8c4d0a5752ffa36ea670395'
+      HELIOS_CHECKPOINT || '0x56730869a74dd57d1723580bd8b5bfa8e997fe61347cffe77af081a8ce2f7f0d'
   }
   // {
   //   name: 'Base Sepolia',
