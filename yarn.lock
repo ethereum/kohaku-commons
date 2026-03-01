@@ -14,10 +14,10 @@
     typescript "^5.7.3"
     viem "2.22.14"
 
-"@a16z/helios@0.11.0":
-  version "0.11.0"
-  resolved "https://registry.npmjs.org/@a16z/helios/-/helios-0.11.0.tgz"
-  integrity sha512-2j9B6y1njMkWYK76G7NGZ9ujZt6GNNN3ncPD1+a0Q0VT0Fy/z50BHiC2hhThESN6ZzZDCg4uDwsfpVgiQ+TqlA==
+"@a16z/helios@0.11.1":
+  version "0.11.1"
+  resolved "https://registry.npmjs.org/@a16z/helios/-/helios-0.11.1.tgz"
+  integrity sha512-rd+RNnhKcDDRJsEOeHQ7I5FcSG2sZ1dKblCA7tI+tFdhQ5Fdox6ZwIQYdyn7s2YKVx+bnyrLociWxNvmAuaK/Q==
   dependencies:
     eventemitter3 "^5.0.1"
     uuid "^11.0.5"
@@ -2092,10 +2092,10 @@
   resolved "https://registry.npmjs.org/@ungap/structured-clone/-/structured-clone-1.3.0.tgz"
   integrity sha512-WmoN8qaIAo7WTYWbAZuG8PYEhn5fkz7dZrqTBZ7dtt//lL2Gwms1IcnQ5yHqjDfX8Ft5j4YzDM23f87zBfDe9g==
 
-"@unrs/resolver-binding-darwin-arm64@1.11.1":
+"@unrs/resolver-binding-darwin-x64@1.11.1":
   version "1.11.1"
-  resolved "https://registry.npmjs.org/@unrs/resolver-binding-darwin-arm64/-/resolver-binding-darwin-arm64-1.11.1.tgz"
-  integrity sha512-gPVA1UjRu1Y/IsB/dQEsp2V1pm44Of6+LWvbLc9SDk1c2KhhDRDBUkQCYVWe6f26uJb3fOK8saWMgtX8IrMk3g==
+  resolved "https://registry.npmjs.org/@unrs/resolver-binding-darwin-x64/-/resolver-binding-darwin-x64-1.11.1.tgz"
+  integrity sha512-cFzP7rWKd3lZaCsDze07QX1SC24lO8mPty9vdP+YVa3MGdVgPmFc59317b2ioXtgCMKGiCLxJ4HQs62oz6GfRQ==
 
 "@walletconnect/browser-utils@^1.8.0":
   version "1.8.0"
