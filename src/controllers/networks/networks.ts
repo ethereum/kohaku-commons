@@ -290,9 +290,13 @@ export class NetworksController extends EventEmitter {
           // and we dont want to update lastUpdatedNetworkInfo
           if (info.flagged) return
           const chainId = network.chainId.toString()
+          const { platformId, nativeAssetId, ...restInfo } = info as NetworkInfo
           this.#networks[chainId] = {
             ...this.#networks[chainId],
-            ...(info as NetworkInfo),
+            ...restInfo,
+            // Preserve if CoinGecko fetch returned null
+            ...(platformId !== null && { platformId }),
+            ...(nativeAssetId !== null && { nativeAssetId }),
             lastUpdatedNetworkInfo: Date.now()
           }
 
