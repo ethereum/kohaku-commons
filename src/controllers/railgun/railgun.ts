@@ -608,9 +608,20 @@ export class RailgunController extends EventEmitter {
     value: string
     chainId: number
     isInternalTransfer?: boolean
+    tokenAddress: string
+    amount: string
+    recipient: string
+    feeFormatted: string | null
   }) {
     if (!this.#selectedAccount?.account) {
       throw new Error('No account selected')
+    }
+
+    const withdrawalData = {
+      token: params.tokenAddress,
+      amount: params.amount,
+      recipient: params.recipient,
+      feeFormatted: params.feeFormatted
     }
 
     console.log('DEBUG: directBroadcastWithdrawal called')
@@ -640,7 +651,9 @@ export class RailgunController extends EventEmitter {
         // @ts-ignore
         isRailgunWithdrawal: true,
         // @ts-ignore
-        isRailgunInternalTransfer: params.isInternalTransfer || false
+        isRailgunInternalTransfer: params.isInternalTransfer || false,
+        // @ts-ignore
+        withdrawalData
       }
     }
 
@@ -711,10 +724,15 @@ export class RailgunController extends EventEmitter {
           },
           timestamp: new Date().getTime(),
           meta: {
+            // @ts-ignore - Custom meta properties for railgun withdrawal
+            txnId: txHash,
             // @ts-ignore
+            // isRailgunWithdrawal: !params.isInternalTransfer,
             isRailgunWithdrawal: true,
             // @ts-ignore
-            isRailgunInternalTransfer: params.isInternalTransfer || false
+            isRailgunInternalTransfer: params.isInternalTransfer || false,
+            // @ts-ignore
+            withdrawalData
           }
         }
 
