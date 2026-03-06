@@ -6,9 +6,8 @@ const RPC_PROVIDER = process.env.RPC_PROVIDER
 const HELIOS_CHECKPOINT = process.env.HELIOS_CHECKPOINT
 
 function resolveRpcProvider() {
-  if (RPC_PROVIDER === 'rpc' || RPC_PROVIDER === 'helios' || RPC_PROVIDER === 'colibri') return RPC_PROVIDER
-  // Backward-compatibility: allow legacy flag while migrating env files.
-  if (process.env.USE_HELIOS === 'true') return 'helios'
+  if (RPC_PROVIDER === 'rpc' || RPC_PROVIDER === 'helios' || RPC_PROVIDER === 'colibri')
+    return RPC_PROVIDER
   return 'rpc'
 }
 

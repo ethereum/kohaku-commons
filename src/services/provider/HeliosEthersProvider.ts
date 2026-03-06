@@ -38,6 +38,8 @@ export class HeliosEthersProvider implements Eip1193Provider {
 
   private checkpointUpdateCallback?: (checkpoint: string) => void
 
+  private isDestroyed = false
+
   constructor(config: MinNetworkConfig, rpcUrl: string, staticNetwork: Network) {
     this.config = config
     this.rpcUrl = rpcUrl
@@ -188,6 +190,10 @@ export class HeliosEthersProvider implements Eip1193Provider {
   }
 
   async request({ method, params }: { method: string; params: any[] }) {
+    if (this.isDestroyed) {
+      throw new Error('HeliosEthersProvider has been destroyed')
+    }
+
     if (this.syncedHelios) {
       return this.syncedHelios.request({ method, params })
     }
@@ -201,6 +207,38 @@ export class HeliosEthersProvider implements Eip1193Provider {
       return await helios.request({ method, params })
     } catch (error) {
       return this.getFallbackProvider().send(method, params ?? [])
+    }
+  }
+
+  destroy(): void {
+    if (this.isDestroyed) return
+    this.isDestroyed = true
+
+    if (this.timeoutTimerId) {
+      clearTimeout(this.timeoutTimerId)
+      this.timeoutTimerId = undefined
+    }
+
+    if (this.syncedHelios && this.checkpointEventHandler) {
+      this.syncedHelios.removeListener('helios_checkpointUpdated', this.checkpointEventHandler)
+      this.checkpointEventHandler = undefined
+    }
+
+    if (this.syncedHelios) {
+      this.syncedHelios.shutdown().catch(() => {})
+      this.syncedHelios = null
+    } else if (this.heliosInitPromise) {
+      this.heliosInitPromise.then((helios) => helios.shutdown()).catch(() => {})
+    }
+
+    this.heliosInitPromise = undefined
+    this.heliosSyncPromise = undefined
+    this.throwAfterTimeout = undefined
+    this.checkpointUpdateCallback = undefined
+
+    if (this.fallbackProvider) {
+      this.fallbackProvider.destroy()
+      this.fallbackProvider = null
     }
   }
 

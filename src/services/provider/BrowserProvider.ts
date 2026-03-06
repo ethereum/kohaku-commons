@@ -32,4 +32,9 @@ export class BrowserProvider extends BrowserProviderEthers implements RPCProvide
   onCheckpointUpdate(callback: (checkpoint: string) => void) {
     this.#heliosProvider.onCheckpointUpdate(callback)
   }
+
+  destroy(): void {
+    this.#heliosProvider.destroy()
+    super.destroy()
+  }
 }
