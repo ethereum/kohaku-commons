@@ -31,19 +31,6 @@ function parseCsvEnv(value: string | undefined): string[] | null {
     return parts.length ? parts : null
 }
 
-function shouldBypassColibri(method: string, params: any[] | undefined): boolean {
-    // Colibri is an EIP-1193 provider. Some wallet internals rely on JsonRpcProvider-specific behavior
-    // and/or use JSON-RPC extensions. Those requests should continue to use the direct RPC.
-    if (method !== 'eth_call') return false
-    if (!Array.isArray(params)) return false
-
-    // State override calls look like: eth_call([tx, blockTag, stateOverride])
-    // Deployless uses state override heavily; route those calls via the underlying RPC to preserve behavior.
-    if (params.length >= 3 && params[2] && typeof params[2] === 'object') return true
-
-    return false
-}
-
 /**
  * Colibri-backed RPC provider.
  *
@@ -97,10 +84,6 @@ export class ColibriRpcProvider extends JsonRpcProvider {
     }
 
     override async send(method: string, params: Array<any> | Record<string, any> = []): Promise<any> {
-        if (shouldBypassColibri(method, params as any)) {
-            return super.send(method, params as any)
-        }
-
         // Colibri implements EIP-1193. Use it as the request entrypoint.
         // Its internal proof strategy decides whether to verify or fall back for unsupported methods.
         return this.#colibri.request({ method, params })
