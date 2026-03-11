@@ -182,7 +182,11 @@ export class PrivacyPoolsV1Controller extends EventEmitter {
 
     try {
       this.#pluginStorage = await createPluginStorage(this.#storageController)
-      const chainId = this.#networks.networks[0].chainId
+      // I Couldn't find a better way to check the current chainId
+      const chainId = this.#selectedAccount.portfolio.tokens.at(0)?.chainId
+      if (!chainId) {
+        throw new Error('Could not determine chainId')
+      }
 
       const host = await hostFactory(
         this.#keystore,
