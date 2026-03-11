@@ -80,6 +80,7 @@ import { SelectedAccountController } from '../selectedAccount/selectedAccount'
 import {
   SIGN_ACCOUNT_OP_MAIN,
   SIGN_ACCOUNT_OP_PRIVACY_POOLS,
+  SIGN_ACCOUNT_OP_PRIVACY_POOLS_V1,
   SIGN_ACCOUNT_OP_RAILGUN,
   SIGN_ACCOUNT_OP_SWAP,
   SIGN_ACCOUNT_OP_TRANSFER,
@@ -92,6 +93,7 @@ import { SwapAndBridgeController } from '../swapAndBridge/swapAndBridge'
 import { TransactionManagerController } from '../transaction/transactionManager'
 import { TransferController } from '../transfer/transfer'
 import { PrivacyPoolsController } from '../privacyPools/privacyPools'
+import { PrivacyPoolsV1Controller } from '../privacyPools/privacyPoolsV1'
 import { RailgunController } from '../railgun/railgun'
 
 const STATUS_WRAPPED_METHODS = {
@@ -161,6 +163,8 @@ export class MainController extends EventEmitter {
   transfer: TransferController
 
   privacyPools: PrivacyPoolsController
+
+  privacyPoolsV1: PrivacyPoolsV1Controller
 
   railgun: RailgunController
 
@@ -526,6 +530,18 @@ export class MainController extends EventEmitter {
       this.fetch
     )
 
+    this.privacyPoolsV1 = new PrivacyPoolsV1Controller(
+      this.keystore,
+      this.networks,
+      this.selectedAccount,
+      this.storage,
+      this.accounts,
+      this.providers,
+      this.portfolio,
+      this.activity,
+      this.#externalSignerControllers
+    )
+
     this.railgun = new RailgunController(
       this.keystore,
       this.accounts,
@@ -815,6 +831,8 @@ export class MainController extends EventEmitter {
       signAccountOp = this.swapAndBridge.signAccountOpController
     } else if (type === SIGN_ACCOUNT_OP_PRIVACY_POOLS) {
       signAccountOp = this.privacyPools.signAccountOpController
+    } else if (type === SIGN_ACCOUNT_OP_PRIVACY_POOLS_V1) {
+      signAccountOp = this.privacyPoolsV1.signAccountOpController
     } else if (type === SIGN_ACCOUNT_OP_RAILGUN) {
       signAccountOp = this.railgun.signAccountOpController
     } else {
@@ -2110,6 +2128,14 @@ export class MainController extends EventEmitter {
       // This prevents stale state issues on subsequent deposits
       // The SignAccountOpController will be destroyed when user navigates away
       this.privacyPools.resetForm(false)
+    }
+
+    if (type === SIGN_ACCOUNT_OP_PRIVACY_POOLS_V1) {
+      if (this.privacyPoolsV1.shouldTrackLatestBroadcastedAccountOp) {
+        this.privacyPoolsV1.latestBroadcastedAccountOp = submittedAccountOp
+      }
+
+      this.privacyPoolsV1.destroySignAccountOp()
     }
 
     if (type === SIGN_ACCOUNT_OP_RAILGUN) {
