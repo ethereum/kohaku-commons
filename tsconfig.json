@@ -9,7 +9,7 @@
 		"lib": ["ESNext", "DOM"],
 		"types": ["node", "jest", "mocha"],
 		"target": "ESNext",
-		"moduleResolution": "node",
+		"moduleResolution": "bundler",
 		"allowSyntheticDefaultImports": true,
 		"skipLibCheck": true,
 		"allowJs": true,
