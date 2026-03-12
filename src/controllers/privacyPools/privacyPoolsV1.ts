@@ -165,6 +165,11 @@ export class PrivacyPoolsV1Controller extends EventEmitter {
           this.init()
         } else {
           this.#currentAccountAddr = newAddr
+          // Retry init when portfolio loads for the first time (empty storage on first run)
+          if (!this.isInitialized && !this.initializationError) {
+            // eslint-disable-next-line @typescript-eslint/no-floating-promises
+            this.init()
+          }
         }
       }),
       this.#keystore.onUpdate(() => {
@@ -182,7 +187,15 @@ export class PrivacyPoolsV1Controller extends EventEmitter {
 
     try {
       this.#pluginStorage = await createPluginStorage(this.#storageController)
-      const chainId = this.#networks.networks[0].chainId
+      // I Couldn't find a better way to check the current chainId
+      const chainId = this.#selectedAccount.portfolio.tokens.at(0)?.chainId
+      if (!chainId) {
+        // Portfolio not loaded yet (e.g. first run with empty storage).
+        // Return without setting initializationError so the selectedAccount
+        // subscription can retry once the portfolio arrives.
+        this.emitUpdate()
+        return
+      }
 
       const host = await hostFactory(
         this.#keystore,
@@ -207,7 +220,8 @@ export class PrivacyPoolsV1Controller extends EventEmitter {
           deploymentBlock: entrypointConfig.entrypoint.deploymentBlock
         },
         broadcasterUrl: BROADCASTER_URL,
-        aspServiceFactory: () => new IPFSAspService({ network: host.network })
+        aspServiceFactory: () =>
+          new OxBowAspService({ network: host.network, aspUrl: 'https://dw.0xbow.io' })
       })
 
       this.isInitialized = true
