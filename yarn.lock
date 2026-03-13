@@ -309,10 +309,10 @@
     ethers "^5.7.2"
     secp256k1 "^5.0.0"
 
-"@corpus-core/colibri-stateless@^1.1.18":
-  version "1.1.18"
-  resolved "https://registry.npmjs.org/@corpus-core/colibri-stateless/-/colibri-stateless-1.1.18.tgz"
-  integrity sha512-wIYd4auSKWYSehNVrE+INll0Z/G9OK35KbcYHIoZmc+k+is763h/7kDbnt5d1gMjAV90sHYpXXcxVQ78Y0XezA==
+"@corpus-core/colibri-stateless@^1.1.19":
+  version "1.1.19"
+  resolved "https://registry.npmjs.org/@corpus-core/colibri-stateless/-/colibri-stateless-1.1.19.tgz"
+  integrity sha512-MziFCHEqFfzSNdanyPKlTQRTDBNLMS1mNM6HEN0kz60QpCs4HOxkjLu3MqQ50ICDi1+zgxejgWn0HMfa2PbeUw==
 
 "@cspotcode/source-map-support@^0.8.0":
   version "0.8.1"
