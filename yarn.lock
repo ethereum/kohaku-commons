@@ -1197,32 +1197,34 @@
     "@jridgewell/resolve-uri" "^3.1.0"
     "@jridgewell/sourcemap-codec" "^1.4.14"
 
-"@kohaku-eth/plugins@0.0.1-alpha.2":
-  version "0.0.1-alpha.2"
-  resolved "https://registry.npmjs.org/@kohaku-eth/plugins/-/plugins-0.0.1-alpha.2.tgz"
-  integrity sha512-yPbT/su4pepkfddRpBynE7oyjaU78GUUzUwjSmHgwgCNOQRyNmAyoWE/kn/Dhqm4MUJPznTIFlOio5+quIIfNQ==
+"@kohaku-eth/plugins@0.0.1-alpha.5":
+  version "0.0.1-alpha.5"
+  resolved "https://registry.yarnpkg.com/@kohaku-eth/plugins/-/plugins-0.0.1-alpha.5.tgz#c0a75590440a809aa4b5bf6a31e84dfd9975fcf5"
+  integrity sha512-1mSbjbfxpd+em1ocwA2vDpAvB/UEfmtSoLb7U7ikJgi8y3LBhHNoGKzn0UwvK3pg250651IOlLBHJoX66E0PRA==
   dependencies:
-    "@kohaku-eth/provider" "0.0.1-alpha.2"
+    "@kohaku-eth/provider" "0.1.0-alpha.5"
     ox "^0.12.0"
 
-"@kohaku-eth/privacy-pools@0.0.2-alpha.1":
-  version "0.0.2-alpha.1"
-  resolved "https://registry.npmjs.org/@kohaku-eth/privacy-pools/-/privacy-pools-0.0.2-alpha.1.tgz"
-  integrity sha512-lkrMnJnL2NWe2t2w7ka51kCOKHSvR9diNCxXzFS+jtYsPnKNLX8bih3RSznPFw8aWyWPwO1Do4gSx8hctQCDTA==
+"@kohaku-eth/privacy-pools@0.0.2-alpha.4":
+  version "0.0.2-alpha.4"
+  resolved "https://registry.yarnpkg.com/@kohaku-eth/privacy-pools/-/privacy-pools-0.0.2-alpha.4.tgz#90de64b3e8aeeef8cb6fab12170b8d19bc9b5de9"
+  integrity sha512-fvT5p/vXUBXgc0PPVACWRxWlkfJJaM66HVMJz5zGWKho/eQaFoNAjBlsvwb5dIdAuZFTa4tRLBWGn0aj2dSfvg==
   dependencies:
     "@fatsolutions/privacy-pools-core-circuits" "1.0.5"
-    "@kohaku-eth/plugins" "0.0.1-alpha.2"
-    "@kohaku-eth/provider" "0.0.1-alpha.2"
+    "@kohaku-eth/plugins" "0.0.1-alpha.5"
+    "@kohaku-eth/provider" "0.1.0-alpha.5"
     "@reduxjs/toolkit" "^2.11.2"
     "@zk-kit/lean-imt" "^2.2.4"
     maci-crypto "2.5.0"
     ox "^0.12.0"
     viem "^2.37.9"
 
-"@kohaku-eth/provider@0.0.1-alpha.2":
-  version "0.0.1-alpha.2"
-  resolved "https://registry.npmjs.org/@kohaku-eth/provider/-/provider-0.0.1-alpha.2.tgz"
-  integrity sha512-PBq2lirSg+nzlYJy8aRB7bd1Y0kb7eq+CXkgyQserQ3Nn49Sp/FXcvlWXySFFYqlRwa7PCxqLxVc1WyfEjdOvg==
+"@kohaku-eth/provider@0.1.0-alpha.5":
+  version "0.1.0-alpha.5"
+  resolved "https://registry.yarnpkg.com/@kohaku-eth/provider/-/provider-0.1.0-alpha.5.tgz#af0281c43a2f4b9e4c583fa4970e47cf23622e75"
+  integrity sha512-zxRgOipu4/MgEB+O96VK/mXtSeS6Q2ubxAs9rKJCzP74EHGTGOXY1RQO9kD0meTfH3Vzl8G84lMhf4gNP2FA/A==
+  dependencies:
+    ox "^0.12.0"
 
 "@leichtgewicht/ip-codec@^2.0.1":
   version "2.0.5"
