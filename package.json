@@ -15,6 +15,8 @@
   },
   "dependencies": {
     "@corpus-core/colibri-stateless": "^1.1.18",
+    "@kohaku-eth/plugins": "0.0.1-alpha.1",
+    "@kohaku-eth/privacy-pools": "0.0.1",
     "@lifi/types": "^17.7.1",
     "@metamask/eth-sig-util": "^8.2.0",
     "aes-js": "^3.1.2",
@@ -29,8 +31,8 @@
     "viem": "^2.33.3"
   },
   "peerDependencies": {
-    "viem": "2.33.2",
     "@0xbow/privacy-pools-core-sdk": "0.1.22",
+    "@a16z/helios": "0.11.1",
     "@ambire/signature-validator": "^1.0.3",
     "@ensdomains/eth-ens-namehash": "^2.0.15",
     "@ethersproject/abstract-signer": "^5.7.0",
@@ -44,7 +46,7 @@
     "secp256k1": "^5.0.1",
     "url": "^0.11.0",
     "validator": "^13.7.0",
-    "@a16z/helios": "0.11.1"
+    "viem": "2.33.2"
   },
   "peerDependenciesMeta": {
     "@noble/hashes": {
