@@ -36,7 +36,7 @@ import { EstimationStatus } from '../estimation/types'
 import wait from '../../utils/wait'
 import { hostFactory } from './hostFactory'
 
-const BROADCASTER_URL = 'https://fastrelay.xyz'
+const BROADCASTER_URL = 'https://fastrelay.xyz/relayer'
 
 const PLUGIN_STORAGE_KEY = 'privacyPoolsV1PluginStorage'
 
