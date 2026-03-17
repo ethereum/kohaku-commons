@@ -4,8 +4,7 @@ import {
   createPPv1Broadcaster,
   OxBowAspService,
   PrivacyPoolsV1_0xBow,
-  E_ADDRESS,
-  IPFSAspService
+  E_ADDRESS
 } from '@kohaku-eth/privacy-pools'
 import type {
   PPv1AssetBalance,
@@ -35,6 +34,7 @@ import { randomId } from '../../libs/humanizer/utils'
 import { EstimationStatus } from '../estimation/types'
 import wait from '../../utils/wait'
 import { hostFactory } from './hostFactory'
+import * as sepoliaState from './state.json'
 
 const BROADCASTER_URL = 'https://fastrelay.xyz/relayer'
 
@@ -214,6 +214,7 @@ export class PrivacyPoolsV1Controller extends EventEmitter {
         )
 
       this.#ppv1Instance = createPPv1Plugin(host, {
+        initialState: sepoliaState as never,
         accountIndex: 0,
         entrypoint: {
           address: BigInt(entrypointConfig.entrypoint.entrypointAddress),
