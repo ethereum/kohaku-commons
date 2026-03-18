@@ -16,7 +16,7 @@
   "dependencies": {
     "@corpus-core/colibri-stateless": "^1.1.19",
     "@kohaku-eth/plugins": "0.0.1-alpha.5",
-    "@kohaku-eth/privacy-pools": "0.0.2-alpha.5",
+    "@kohaku-eth/privacy-pools": "0.0.2-alpha.6",
     "@lifi/types": "^17.7.1",
     "@metamask/eth-sig-util": "^8.2.0",
     "aes-js": "^3.1.2",
