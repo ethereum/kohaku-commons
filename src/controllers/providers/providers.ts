@@ -36,6 +36,9 @@ export class ProvidersController extends EventEmitter {
   }
 
   setProvider(network: Network) {
+    // Skip networks with no configured RPC URLs (e.g. mainnet networks in testnet-only mode)
+    if (!network.rpcUrls.length || !network.selectedRpcUrl) return
+
     const provider = this.providers[network.chainId.toString()]
     const desiredProviderKind = network.rpcProvider ?? 'rpc'
 

@@ -422,36 +422,7 @@ export class SwapAndBridgeController extends EventEmitter {
   }
 
   async #load() {
-    await this.#networks.initialLoadPromise
-    await this.#selectedAccount.initialLoadPromise
-
-    this.activeRoutes = await this.#storage.get('swapAndBridgeActiveRoutes', [])
-    // Service provider may have changed since the last time the user interacted
-    // with the Swap & Bridge. So strip out cached active routes that were NOT
-    // made by the current service provider, because they are NOT compatible.
-    //
-    // also, just in case protection: filter out ready routes as we don't have
-    // retry mechanism or follow up transaction handling anymore. Which means
-    // ready routes in the storage are just leftover routes.
-    // Same is true for completed, failed and refunded routes - they are just
-    // leftover routes in storage
-    const filterOutStatuses = ['ready', 'completed', 'failed', 'refunded']
-    this.activeRoutes = this.activeRoutes.filter(
-      (r) =>
-        r.serviceProviderId === this.#serviceProviderAPI.id &&
-        !filterOutStatuses.includes(r.routeStatus)
-    )
-
-    this.#selectedAccount.onUpdate(() => {
-      this.#debounceFunctionCallsOnSameTick('updateFormOnSelectedAccountUpdate', async () => {
-        if (this.#selectedAccount.portfolio.isReadyToVisualize) {
-          this.isTokenListLoading = false
-          await this.updatePortfolioTokenList(this.#selectedAccount.portfolio.tokens)
-          // To token list includes selected account portfolio tokens, it should get an update too
-          await this.updateToTokenList(false)
-        }
-      })
-    })
+    // Swap & Bridge is disabled in this build — skip all initialization
     this.#emitUpdateIfNeeded()
   }
 
@@ -588,6 +559,10 @@ export class SwapAndBridgeController extends EventEmitter {
       activeRouteIdToDelete?: SwapAndBridgeSendTxRequest['activeRouteId']
     }
   ) {
+    // Swap & Bridge is disabled in this build
+    return
+
+    // eslint-disable-next-line no-unreachable
     const { preselectedFromToken, preselectedToToken, fromAmount, activeRouteIdToDelete } =
       params || {}
     await this.#initialLoadPromise

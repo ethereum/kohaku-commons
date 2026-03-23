@@ -267,6 +267,9 @@ export class NetworksController extends EventEmitter {
    */
   async #updateNetworkFeatures(finalNetworks: { [key: string]: Network }) {
     const updatePromises = Object.values(finalNetworks).map(async (network) => {
+      // Skip networks with no configured RPC URL
+      if (!network.selectedRpcUrl) return
+
       if (network.isSAEnabled) return
 
       if (

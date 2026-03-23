@@ -9,9 +9,7 @@ import {
   RelayerNetwork
 } from '../interfaces/network'
 
-const hardcodedRpcUrls: { [chainId: string]: string } = {
-  '11155111': 'https://eth-sepolia.public.blastapi.io'
-}
+const hardcodedRpcUrls: { [chainId: string]: string } = {}
 
 const checkIsRpcUrlWorking = async (rpcUrl: string) => {
   const provider = new JsonRpcProvider(rpcUrl)
