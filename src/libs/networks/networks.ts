@@ -342,7 +342,7 @@ export function getFeaturesByNetworkProperties(
     updateFeature('prices', {
       level: hasNativeAssetId ? 'success' : 'danger',
       msg: hasNativeAssetId
-        ? 'We pull token price information in real-time using third-party providers.'
+        ? "" // EDIT: removed: 'We pull token price information in real-time using third-party providers.'
         : "Our third-party providers don't support this network yet, so we cannot show token prices."
     })
   }
