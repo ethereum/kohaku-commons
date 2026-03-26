@@ -159,17 +159,14 @@ export class PrivacyPoolsV1Controller extends EventEmitter {
     this.#subs.push(
       this.#selectedAccount.onUpdate(() => {
         const newAddr = this.#selectedAccount.account?.addr ?? null
+
         if (newAddr !== this.#currentAccountAddr) {
           this.#currentAccountAddr = newAddr
+        }
+
+        if (!this.isInitialized && !this.initializationError) {
           // eslint-disable-next-line @typescript-eslint/no-floating-promises
           this.init()
-        } else {
-          this.#currentAccountAddr = newAddr
-          // Retry init when portfolio loads for the first time (empty storage on first run)
-          if (!this.isInitialized && !this.initializationError) {
-            // eslint-disable-next-line @typescript-eslint/no-floating-promises
-            this.init()
-          }
         }
       }),
       this.#keystore.onUpdate(() => {
