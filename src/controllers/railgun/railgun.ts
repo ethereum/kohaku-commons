@@ -17,15 +17,16 @@ import { getBaseAccount } from '../../libs/account/getBaseAccount'
 import { getAmbirePaymasterService } from '../../libs/erc7677/erc7677'
 import { randomId } from '../../libs/humanizer/utils'
 import { getPrivateKeyFromSeed } from '../../libs/keyIterator/keyIterator'
-import { HD_PATH_TEMPLATE_TYPE, BIP44_STANDARD_DERIVATION_TEMPLATE } from '../../consts/derivation'
+import { BIP44_STANDARD_DERIVATION_TEMPLATE } from '../../consts/derivation'
 import { EstimationStatus } from '../estimation/types'
 import { validatePrivacyPoolsDepositAmount } from '../../services/privacyPools/validations'
-import { formatUnits, parseUnits } from 'viem'
+import { formatUnits } from 'viem'
 import wait from '../../utils/wait'
 import { relayerCall } from '../../libs/relayerCall/relayerCall'
 import { Fetch } from '../../interfaces/fetch'
 import { AccountOpStatus } from '../../libs/accountOp/types'
 import { SubmittedAccountOp } from '../../libs/accountOp/submittedAccountOp'
+import { deriveRailgunKeysByIndex } from 'derive-railgun-keys'
 
 interface RailgunFormUpdate {
   depositAmount?: string
@@ -170,10 +171,6 @@ export class RailgunController extends EventEmitter {
   // KEY DERIVATION (controller-only)
   // ─────────────────────────────────────────────
   async #getRailgunKeysInternal(index: number): Promise<RailgunAccountKeys> {
-    const RAILGUN_VIEWING_DERIVATION_TEMPLATE =
-      "m/420'/1984'/0'/0'/<account>'" as HD_PATH_TEMPLATE_TYPE
-    const RAILGUN_SPENDING_DERIVATION_TEMPLATE =
-      "m/44'/1984'/0'/0'/<account>'" as HD_PATH_TEMPLATE_TYPE
 
     console.log('DEBUG: RAILGUN: GET SEED PHRASE')
     const seedPhrase = await this.#getCurrentAccountSeed()
@@ -184,18 +181,7 @@ export class RailgunController extends EventEmitter {
 
     console.log('DEBUG: RAILGUN: SEED PHRASE FOUND')
 
-    const viewingKey = getPrivateKeyFromSeed(
-      seedPhrase,
-      null,
-      index,
-      RAILGUN_VIEWING_DERIVATION_TEMPLATE
-    )
-    const spendingKey = getPrivateKeyFromSeed(
-      seedPhrase,
-      null,
-      index,
-      RAILGUN_SPENDING_DERIVATION_TEMPLATE
-    )
+    const {spending: spendingKey, viewing: viewingKey} = deriveRailgunKeysByIndex(seedPhrase, index)
     const shieldKeySigner = getPrivateKeyFromSeed(
       seedPhrase,
       null,
