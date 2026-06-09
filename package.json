@@ -17,6 +17,8 @@
     "@corpus-core/colibri-stateless": "^1.1.19",
     "@kohaku-eth/plugins": "0.0.1-alpha.5",
     "@kohaku-eth/privacy-pools": "0.0.2-alpha.6",
+    "@kohaku-eth/provider": "0.1.0-alpha.5",
+    "@kohaku-eth/railgun": "0.0.1-alpha.27",
     "@lifi/types": "^17.7.1",
     "@metamask/eth-sig-util": "^8.2.0",
     "aes-js": "^3.1.2",
@@ -29,7 +31,7 @@
     "js-yaml": "^4.1.0",
     "scrypt-js": "^3.0.1",
     "uuid": "9.0.0",
-    "viem": "^2.33.3"
+    "viem": "2.33.2"
   },
   "peerDependencies": {
     "@0xbow/privacy-pools-core-sdk": "0.1.22",

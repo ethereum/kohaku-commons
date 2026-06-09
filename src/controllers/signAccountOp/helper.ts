@@ -16,6 +16,7 @@ export const SIGN_ACCOUNT_OP_TRANSFER = 'signAccountOpTransfer'
 export const SIGN_ACCOUNT_OP_PRIVACY_POOLS = 'signAccountOpPrivacyPools'
 export const SIGN_ACCOUNT_OP_PRIVACY_POOLS_V1 = 'signAccountOpPrivacyPoolsV1'
 export const SIGN_ACCOUNT_OP_RAILGUN = 'signAccountOpRailgun'
+export const SIGN_ACCOUNT_OP_RAILGUN_V2 = 'signAccountOpRailgunV2'
 export type SignAccountOpType =
   | 'signAccountOpMain'
   | 'signAccountOpSwap'
@@ -23,6 +24,7 @@ export type SignAccountOpType =
   | 'signAccountOpPrivacyPools'
   | 'signAccountOpPrivacyPoolsV1'
   | 'signAccountOpRailgun'
+  | 'signAccountOpRailgunV2'
 
 function getFeeSpeedIdentifier(
   option: FeePaymentOption,
