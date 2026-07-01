@@ -82,6 +82,7 @@ import {
   SIGN_ACCOUNT_OP_PRIVACY_POOLS,
   SIGN_ACCOUNT_OP_PRIVACY_POOLS_V1,
   SIGN_ACCOUNT_OP_RAILGUN,
+  SIGN_ACCOUNT_OP_RAILGUN_V2,
   SIGN_ACCOUNT_OP_SWAP,
   SIGN_ACCOUNT_OP_TRANSFER,
   SignAccountOpType
@@ -95,6 +96,7 @@ import { TransferController } from '../transfer/transfer'
 import { PrivacyPoolsController } from '../privacyPools/privacyPools'
 import { PrivacyPoolsV1Controller } from '../privacyPools/privacyPoolsV1'
 import { RailgunController } from '../railgun/railgun'
+import { RailgunV2Controller } from '../railgun/railgunV2'
 
 const STATUS_WRAPPED_METHODS = {
   removeAccount: 'INITIAL',
@@ -168,6 +170,8 @@ export class MainController extends EventEmitter {
 
   railgun: RailgunController
 
+  railgunV2: RailgunV2Controller
+
   signAccountOp: SignAccountOpController | null = null
 
   signAccOpInitError: string | null = null
@@ -223,6 +227,7 @@ export class MainController extends EventEmitter {
     privacyPoolsAspUrl,
     privacyPoolsRelayerUrl,
     railgunRelayerUrl,
+    railgunDelegatingSignerPk,
     alchemyApiKey,
     hypersyncApiKey,
     featureFlags,
@@ -240,6 +245,7 @@ export class MainController extends EventEmitter {
     privacyPoolsAspUrl: string
     privacyPoolsRelayerUrl: string
     railgunRelayerUrl: string
+    railgunDelegatingSignerPk?: string
     alchemyApiKey: string
     hypersyncApiKey: string
     featureFlags: Partial<FeatureFlags>
@@ -555,6 +561,19 @@ export class MainController extends EventEmitter {
       railgunRelayerUrl,
       this.fetch
     )
+
+    this.railgunV2 = new RailgunV2Controller(
+      this.keystore,
+      this.networks,
+      this.selectedAccount,
+      this.storage,
+      this.accounts,
+      this.providers,
+      this.portfolio,
+      this.activity,
+      this.#externalSignerControllers,
+      railgunDelegatingSignerPk
+    )
   }
 
   /**
@@ -835,6 +854,8 @@ export class MainController extends EventEmitter {
       signAccountOp = this.privacyPoolsV1.signAccountOpController
     } else if (type === SIGN_ACCOUNT_OP_RAILGUN) {
       signAccountOp = this.railgun.signAccountOpController
+    } else if (type === SIGN_ACCOUNT_OP_RAILGUN_V2) {
+      signAccountOp = this.railgunV2.signAccountOpController
     } else {
       signAccountOp = this.transfer.signAccountOpController
     }
@@ -1866,7 +1887,8 @@ export class MainController extends EventEmitter {
           // Skip relayer for Railgun operations as they don't need relayer recording
           if (
             accountOp.gasFeePayment.broadcastOption !== BROADCAST_OPTIONS.byOtherEOA &&
-            type !== SIGN_ACCOUNT_OP_RAILGUN
+            type !== SIGN_ACCOUNT_OP_RAILGUN &&
+            type !== SIGN_ACCOUNT_OP_RAILGUN_V2
           ) {
             this.callRelayer(`/v2/eoaSubmitTxn/${accountOp.chainId}`, 'POST', {
               rawTxn: signedTxn
@@ -2148,6 +2170,17 @@ export class MainController extends EventEmitter {
       // This prevents stale state issues on subsequent deposits
       // The SignAccountOpController will be destroyed when user navigates away
       this.railgun.resetForm()
+    }
+
+    if (type === SIGN_ACCOUNT_OP_RAILGUN_V2) {
+      if (this.railgunV2.shouldTrackLatestBroadcastedAccountOp) {
+        this.railgunV2.latestBroadcastedAccountOp = submittedAccountOp
+      }
+
+      this.railgunV2.destroySignAccountOp()
+      // Refresh balances after a shield is broadcast.
+      // eslint-disable-next-line @typescript-eslint/no-floating-promises
+      this.railgunV2.sync()
     }
 
     await this.#notificationManager.create({
