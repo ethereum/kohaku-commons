@@ -14,7 +14,7 @@
     "check": "tsc --noEmit && echo 'FIXME: eslint is disabled here because there are too many issues.'"
   },
   "dependencies": {
-    "@corpus-core/colibri-stateless": "^1.1.19",
+    "@corpus-core/colibri-stateless": "^2.0.0",
     "@kohaku-eth/plugins": "0.0.1-alpha.5",
     "@kohaku-eth/privacy-pools": "0.0.2-alpha.6",
     "@kohaku-eth/provider": "0.1.0-alpha.5",
@@ -55,6 +55,9 @@
     "@noble/hashes": {
       "optional": true
     }
+  },
+  "overrides": {
+    "@corpus-core/colibri-stateless": "$@corpus-core/colibri-stateless"
   },
   "devDependencies": {
     "@borislav.itskov/schnorrkel.js": "2.0.85",
