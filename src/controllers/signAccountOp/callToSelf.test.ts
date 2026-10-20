@@ -182,7 +182,7 @@ describe('Calls to the account itself', () => {
   })
 
   test('the kit slot of an audited action with another value is refused', () => {
-    const wrongValues = [kitValue(unlistedAction), abiCoder.encode(['uint256'], [1]), ZeroHash]
+    const wrongValues = [kitValue(unlistedAction), abiCoder.encode(['uint256'], [1])]
     wrongValues.forEach((value) => {
       const grant = { ...kitGrant, data: grantData(kitSlot(auditedAction), value) }
       expect(isRefusedCallToSelf(grant, opWith([commitSetup, grant]))).toBe(true)
@@ -264,6 +264,61 @@ describe('Calls to the account itself', () => {
       recoveryKit: { ...opRecoveryKit, fromUserRequestId: 3 }
     })
     expect(isRefusedCallToSelf(kitGrant, op)).toBe(true)
+  })
+
+  describe('the kit revoke', () => {
+    const kitRevoke = { ...kitGrant, data: grantData(kitSlot(auditedAction), ZeroHash) }
+    const clearSetup = {
+      to: manager,
+      value: 0n,
+      data: new Interface(['function clearSetup(address)']).encodeFunctionData('clearSetup', [
+        auditedAction
+      ]),
+      fromUserRequestId: kitRequestId
+    }
+
+    test('alone from the marked request is allowed', () => {
+      expect(isRefusedCallToSelf(kitRevoke, opWith([kitRevoke]))).toBe(false)
+    })
+
+    test('beside clearSetup from the marked request is allowed', () => {
+      const op = opWith([kitRevoke, clearSetup])
+      expect(op.calls.some((c) => isRefusedCallToSelf(c, op))).toBe(false)
+    })
+
+    test('without the recovery kit on the op is refused', () => {
+      expect(isRefusedCallToSelf(kitRevoke, { accountAddr, calls: [kitRevoke, clearSetup] })).toBe(
+        true
+      )
+      expect(isRefusedCallToSelf(kitRevoke, opWith([kitRevoke, clearSetup], {}))).toBe(true)
+    })
+
+    test('from another request than the marked one is refused', () => {
+      const otherRevoke = fromOtherRequest(kitRevoke)
+      expect(isRefusedCallToSelf(otherRevoke, opWith([otherRevoke, clearSetup]))).toBe(true)
+    })
+
+    test('a zero write at the slot of an action that is not audited is refused', () => {
+      const revoke = { ...kitGrant, data: grantData(kitSlot(unlistedAction), ZeroHash) }
+      expect(isRefusedCallToSelf(revoke, opWith([revoke]))).toBe(true)
+    })
+
+    test('a zero write at another address than a kit slot is refused', () => {
+      const revoke = { ...kitGrant, data: grantData(otherAddr, ZeroHash) }
+      expect(isRefusedCallToSelf(revoke, opWith([revoke, clearSetup]))).toBe(true)
+    })
+
+    test('a value at the kit slot that is neither zero nor the grant is refused without commitSetup', () => {
+      const wrongValues = [
+        kitValue(unlistedAction),
+        abiCoder.encode(['uint256'], [1]),
+        kitValue(auditedAction)
+      ]
+      wrongValues.forEach((value) => {
+        const write = { ...kitGrant, data: grantData(kitSlot(auditedAction), value) }
+        expect(isRefusedCallToSelf(write, opWith([write, clearSetup]))).toBe(true)
+      })
+    })
   })
 
   test('the kit grant in an op built from the wallet request with the kit is allowed, and refused without it', () => {

@@ -16,30 +16,67 @@ const abiCoder = AbiCoder.defaultAbiCoder()
 const isCallTo = (call: Pick<IrCall, 'to'>, addr: string): boolean =>
   !!call.to && call.to.toLowerCase() === addr.toLowerCase()
 
+type RecoveryKitOp = Pick<AccountOp, 'accountAddr' | 'calls' | 'meta'>
+type RecoveryKitCall = Pick<IrCall, 'to' | 'data' | 'fromUserRequestId'>
+
+const kitSlot = (action: string): string =>
+  getAddress(`0x${keccak256(abiCoder.encode(['string', 'address'], ['kit', action])).slice(-40)}`)
+
+const kitGrantValue = (action: string): string =>
+  keccak256(abiCoder.encode(['address', 'string'], [action, '']))
+
+const isFromKitRequest = (
+  accountOp: RecoveryKitOp,
+  call: Pick<IrCall, 'fromUserRequestId'>
+): boolean => {
+  const recoveryKit = accountOp.meta?.recoveryKit
+  return (
+    !!recoveryKit &&
+    call.fromUserRequestId !== undefined &&
+    call.fromUserRequestId === recoveryKit.fromUserRequestId
+  )
+}
+
+// A privilege write the recovery kit may make is a setAddrPrivilege call the account makes to
+// itself, from the one user request that carries the recovery kit.
+const decodeKitPrivilegeWrite = (
+  accountOp: RecoveryKitOp,
+  call: RecoveryKitCall
+): { addr: string; priv: string } | undefined => {
+  if (!accountOp.meta?.recoveryKit || !isCallTo(call, accountOp.accountAddr)) {
+    return undefined
+  }
+  if (!isFromKitRequest(accountOp, call)) {
+    return undefined
+  }
+  if (!call.data || call.data.slice(0, 10).toLowerCase() !== SET_ADDR_PRIVILEGE_SELECTOR) {
+    return undefined
+  }
+  try {
+    const [addr, priv] = iface.decodeFunctionData('setAddrPrivilege', call.data)
+    return { addr, priv }
+  } catch {
+    return undefined
+  }
+}
+
 // The recovery kit grants each audited action a privilege on the account through a call the
 // account makes to itself: setAddrPrivilege(slot, value), where the slot is the address taken
 // from keccak256(abi.encode("kit", action)) and the value is keccak256(abi.encode(action, "")).
 // That exact call is trusted only when the same batch commits the kit's setup on its manager,
 // and only when both calls come from the one user request that carries the recovery kit.
 const findRecoveryKitAction = (
-  accountOp: Pick<AccountOp, 'accountAddr' | 'calls' | 'meta'>,
-  call: Pick<IrCall, 'to' | 'data' | 'fromUserRequestId'>
+  accountOp: RecoveryKitOp,
+  call: RecoveryKitCall
 ): string | undefined => {
   const recoveryKit = accountOp.meta?.recoveryKit
-  if (!recoveryKit || !isCallTo(call, accountOp.accountAddr)) {
-    return undefined
-  }
-  const isFromKitRequest = (c: Pick<IrCall, 'fromUserRequestId'>): boolean =>
-    c.fromUserRequestId !== undefined && c.fromUserRequestId === recoveryKit.fromUserRequestId
-  if (!isFromKitRequest(call)) {
-    return undefined
-  }
-  if (!call.data || call.data.slice(0, 10).toLowerCase() !== SET_ADDR_PRIVILEGE_SELECTOR) {
+  const write = decodeKitPrivilegeWrite(accountOp, call)
+  if (!recoveryKit || !write) {
     return undefined
   }
   const commitsSetup = accountOp.calls.some(
     (c) =>
-      isFromKitRequest(c) &&
+      isFromKitRequest(accountOp, c) &&
       isCallTo(c, recoveryKit.manager) &&
       !!c.data &&
       c.data.slice(0, 10).toLowerCase() === COMMIT_SETUP_SELECTOR
@@ -47,27 +84,32 @@ const findRecoveryKitAction = (
   if (!commitsSetup) {
     return undefined
   }
-
-  let addr: string
-  let priv: string
-  try {
-    ;[addr, priv] = iface.decodeFunctionData('setAddrPrivilege', call.data)
-  } catch {
-    return undefined
-  }
-  return recoveryKit.auditedActions.find((action) => {
-    const slot = getAddress(
-      `0x${keccak256(abiCoder.encode(['string', 'address'], ['kit', action])).slice(-40)}`
-    )
-    const value = keccak256(abiCoder.encode(['address', 'string'], [action, '']))
-    return getAddress(addr) === slot && priv.toLowerCase() === value
-  })
+  return recoveryKit.auditedActions.find(
+    (action) =>
+      getAddress(write.addr) === kitSlot(action) &&
+      write.priv.toLowerCase() === kitGrantValue(action)
+  )
 }
 
-export const isRecoveryKitGrant = (
-  accountOp: Pick<AccountOp, 'accountAddr' | 'calls' | 'meta'>,
-  call: Pick<IrCall, 'to' | 'data' | 'fromUserRequestId'>
-): boolean => findRecoveryKitAction(accountOp, call) !== undefined
+export const isRecoveryKitGrant = (accountOp: RecoveryKitOp, call: RecoveryKitCall): boolean =>
+  findRecoveryKitAction(accountOp, call) !== undefined
+
+// The recovery kit revokes an audited action's privilege by writing the zero word at that
+// action's kit slot, from the request that carries the recovery kit. Taking a privilege away
+// needs no setup beside it.
+const isRecoveryKitRevoke = (accountOp: RecoveryKitOp, call: RecoveryKitCall): boolean => {
+  const recoveryKit = accountOp.meta?.recoveryKit
+  const write = decodeKitPrivilegeWrite(accountOp, call)
+  if (!recoveryKit || !write || write.priv.toLowerCase() !== ZeroHash) {
+    return false
+  }
+  return recoveryKit.auditedActions.some((action) => getAddress(write.addr) === kitSlot(action))
+}
+
+export const isRecoveryKitPrivilegeWrite = (
+  accountOp: RecoveryKitOp,
+  call: RecoveryKitCall
+): boolean => isRecoveryKitGrant(accountOp, call) || isRecoveryKitRevoke(accountOp, call)
 
 // Any grant other than the entry point's lets the granted address act as the called account,
 // so it is shown as a danger. The call may target another account than the one signing,

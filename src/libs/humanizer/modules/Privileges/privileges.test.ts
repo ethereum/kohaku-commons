@@ -8,7 +8,7 @@ import humanizerInfo from '../../../../consts/humanizer/humanizerInfo.json'
 import { AccountOp } from '../../../accountOp/accountOp'
 import { Call } from '../../../accountOp/types'
 import { HumanizerMeta, HumanizerVisualization, IrCall } from '../../interfaces'
-import { isRecoveryKitGrant, privilegeHumanizer } from './privileges'
+import { isRecoveryKitGrant, isRecoveryKitPrivilegeWrite, privilegeHumanizer } from './privileges'
 
 const transactions: { [key: string]: Call[] } = {
   privileges: [
@@ -494,6 +494,72 @@ describe('privileges', () => {
           grantWithoutId
         )
       ).toBe(false)
+    })
+
+    describe('revoke', () => {
+      const kitRevoke = grant(kitSlot(auditedAction), ZeroHash)
+      const clearSetup: Call = {
+        to: manager,
+        value: 0n,
+        data: new Interface(['function clearSetup(address)']).encodeFunctionData('clearSetup', [
+          auditedAction
+        ]),
+        fromUserRequestId: kitRequestId
+      }
+      const opFor = (calls: Call[]) => ({
+        ...accountOp,
+        calls,
+        meta: {
+          recoveryKit: { manager, auditedActions: [auditedAction], fromUserRequestId: kitRequestId }
+        }
+      })
+
+      test('is shown as revoking access with no warning, alone or beside clearSetup', () => {
+        const [alone] = humanize([kitRevoke])
+        const [, besideClear] = humanize([clearSetup, kitRevoke])
+        ;[alone, besideClear].forEach((shown) => {
+          expect(shown.fullVisualization).toMatchObject([
+            { type: 'action', content: 'Revoke access' },
+            { type: 'label', content: 'of' },
+            { type: 'address', address: kitSlot(auditedAction).toLowerCase() }
+          ])
+          expect(shown.fullVisualization).not.toContainEqual(
+            expect.objectContaining({ warning: true })
+          )
+          expect(shown.warnings).toBeUndefined()
+        })
+      })
+
+      test('is a recovery kit privilege write alone or beside clearSetup, and not a grant', () => {
+        expect(isRecoveryKitPrivilegeWrite(opFor([kitRevoke]), kitRevoke)).toBe(true)
+        expect(isRecoveryKitPrivilegeWrite(opFor([kitRevoke, clearSetup]), kitRevoke)).toBe(true)
+        expect(isRecoveryKitGrant(opFor([kitRevoke, clearSetup]), kitRevoke)).toBe(false)
+      })
+
+      test('is not recognised without the recovery kit or from another request', () => {
+        expect(isRecoveryKitPrivilegeWrite({ ...accountOp, calls: [kitRevoke] }, kitRevoke)).toBe(
+          false
+        )
+        const otherRevoke = fromOtherRequest(kitRevoke)
+        expect(isRecoveryKitPrivilegeWrite(opFor([otherRevoke]), otherRevoke)).toBe(false)
+      })
+
+      test('a zero write at another slot is not recognised', () => {
+        const unlistedRevoke = grant(kitSlot(unlistedAction), ZeroHash)
+        expect(isRecoveryKitPrivilegeWrite(opFor([unlistedRevoke]), unlistedRevoke)).toBe(false)
+      })
+
+      test('a value other than zero without commitSetup is not recognised and is shown as a danger', () => {
+        const write = grant(kitSlot(auditedAction), abiCoder.encode(['uint256'], [1]))
+        expect(isRecoveryKitPrivilegeWrite(opFor([write, clearSetup]), write)).toBe(false)
+        const [shown] = humanize([write, clearSetup])
+        expect(shown.warnings).toMatchObject([{ level: 'danger' }])
+      })
+
+      test('the grant is still a recovery kit privilege write beside its commitSetup', () => {
+        expect(isRecoveryKitPrivilegeWrite(opFor([commitSetup, kitGrant]), kitGrant)).toBe(true)
+        expect(isRecoveryKitPrivilegeWrite(opFor([kitGrant]), kitGrant)).toBe(false)
+      })
     })
   })
 

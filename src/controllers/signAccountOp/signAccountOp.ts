@@ -64,7 +64,7 @@ import {
   GasRecommendation
 } from '../../libs/gasPrice/gasPrice'
 import { humanizeAccountOp } from '../../libs/humanizer'
-import { isRecoveryKitGrant } from '../../libs/humanizer/modules/Privileges/privileges'
+import { isRecoveryKitPrivilegeWrite } from '../../libs/humanizer/modules/Privileges/privileges'
 import { hasRelayerSupport } from '../../libs/networks/networks'
 import { AbstractPaymaster } from '../../libs/paymaster/abstractPaymaster'
 import { GetOptions, TokenResult } from '../../libs/portfolio'
@@ -160,7 +160,7 @@ export const isRefusedCallToSelf = (
     return false
   }
 
-  return !isRecoveryKitGrant(accountOp, call)
+  return !isRecoveryKitPrivilegeWrite(accountOp, call)
 }
 
 export type SignAccountOpUpdateProps = {
