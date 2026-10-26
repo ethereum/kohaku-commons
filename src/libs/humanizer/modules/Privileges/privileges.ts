@@ -97,14 +97,20 @@ export const isRecoveryKitGrant = (accountOp: RecoveryKitOp, call: RecoveryKitCa
 // The recovery kit revokes an audited action's privilege by writing the zero word at that
 // action's kit slot, from the request that carries the recovery kit. Taking a privilege away
 // needs no setup beside it.
-const isRecoveryKitRevoke = (accountOp: RecoveryKitOp, call: RecoveryKitCall): boolean => {
+const findRecoveryKitRevokedAction = (
+  accountOp: RecoveryKitOp,
+  call: RecoveryKitCall
+): string | undefined => {
   const recoveryKit = accountOp.meta?.recoveryKit
   const write = decodeKitPrivilegeWrite(accountOp, call)
   if (!recoveryKit || !write || write.priv.toLowerCase() !== ZeroHash) {
-    return false
+    return undefined
   }
-  return recoveryKit.auditedActions.some((action) => getAddress(write.addr) === kitSlot(action))
+  return recoveryKit.auditedActions.find((action) => getAddress(write.addr) === kitSlot(action))
 }
+
+const isRecoveryKitRevoke = (accountOp: RecoveryKitOp, call: RecoveryKitCall): boolean =>
+  findRecoveryKitRevokedAction(accountOp, call) !== undefined
 
 export const isRecoveryKitPrivilegeWrite = (
   accountOp: RecoveryKitOp,
@@ -163,6 +169,16 @@ export const privilegeHumanizer: HumanizerCallModule = (
         fullVisualization: [
           getAction('Enable recovery module'),
           getAddressVisualization(recoveryKitAction)
+        ]
+      }
+    }
+    const revokedAction = findRecoveryKitRevokedAction(accountOp, call)
+    if (revokedAction) {
+      return {
+        ...call,
+        fullVisualization: [
+          getAction('Disable recovery module'),
+          getAddressVisualization(revokedAction)
         ]
       }
     }

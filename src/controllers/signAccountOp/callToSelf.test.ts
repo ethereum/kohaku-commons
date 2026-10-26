@@ -271,9 +271,10 @@ describe('Calls to the account itself', () => {
     const clearSetup = {
       to: manager,
       value: 0n,
-      data: new Interface(['function clearSetup(address)']).encodeFunctionData('clearSetup', [
-        auditedAction
-      ]),
+      data: new Interface(['function clearSetup(address, uint64)']).encodeFunctionData(
+        'clearSetup',
+        [auditedAction, 1]
+      ),
       fromUserRequestId: kitRequestId
     }
 
