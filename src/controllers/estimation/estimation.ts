@@ -144,8 +144,10 @@ export class EstimationController extends EventEmitter {
     const feeTokens =
       [...networkFeeTokens, ...gasTankFeeTokens].filter((t) => t.flags.isFeeToken) || []
 
-    // Here, we list EOA accounts for which you can also obtain an estimation of the AccountOp payment.
-    // In the case of operating with a smart account (an account with creation code), all other EOAs can pay the fee.
+    // Here, we list the EOAs for which you can also obtain an estimation of the AccountOp payment.
+    // In the case of operating with a smart account (an account with creation code), the payers
+    // whose native balance we read are its own keys that the keystore holds, then the listed EOA
+    // accounts that have a key.
     //
     // If the current account is an EOA, only this account can pay the fee,
     // and there's no need for checking other EOA accounts native balances.
@@ -155,7 +157,7 @@ export class EstimationController extends EventEmitter {
     // in all cases EXCEPT the case where we're making an estimation for
     // the view only account itself. In all other, view only accounts options
     // should not be present as the user cannot pay the fee with them (no key)
-    const nativeToCheck = account.creation
+    const listedPayers = account.creation
       ? this.#accounts.accounts
           .filter(
             (acc) =>
@@ -165,6 +167,15 @@ export class EstimationController extends EventEmitter {
           )
           .map((acc) => acc.addr)
       : []
+    // The keys of the smart account that the keystore holds can also pay the fee,
+    // even when they are not listed as accounts. They go before the listed accounts
+    const controllingKeyPayers = account.creation
+      ? account.associatedKeys.filter(
+          (addr) =>
+            !listedPayers.includes(addr) && this.#keystore.keys.some((key) => key.addr === addr)
+        )
+      : []
+    const nativeToCheck = [...controllingKeyPayers, ...listedPayers]
 
     const estimation = await getEstimation(
       baseAcc,

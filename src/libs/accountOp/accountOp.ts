@@ -5,6 +5,7 @@ import { EIP7702Auth } from '../../consts/7702'
 import { SINGLETON } from '../../consts/deploy'
 import { AccountId } from '../../interfaces/account'
 import { Key } from '../../interfaces/keystore'
+import { AccountOpRecoveryKit } from '../../interfaces/recoveryKit'
 import { SwapAndBridgeSendTxRequest } from '../../interfaces/swapAndBridge'
 import { PaymasterService } from '../erc7677/types'
 import { stringify } from '../richJson/richJson'
@@ -78,6 +79,7 @@ export interface AccountOp {
     setDelegation?: boolean
     /** Used to determine if the account op is up-to-date with the latest quote */
     fromQuoteId?: string
+    recoveryKit?: AccountOpRecoveryKit
   }
   flags?: {
     hideActivityBanner?: boolean

@@ -33,6 +33,7 @@ import { TokenResult } from '../../libs/portfolio'
 import {
   ACCOUNT_SWITCH_USER_REQUEST,
   buildSwitchAccountUserRequest,
+  getAccountOpMetaWithRecoveryKit,
   makeAccountOpAction
 } from '../../libs/requests/requests'
 import { parse } from '../../libs/richJson/richJson'
@@ -70,6 +71,8 @@ import { TransferController } from '../transfer/transfer'
 const STATUS_WRAPPED_METHODS = {
   buildSwapAndBridgeUserRequest: 'INITIAL'
 } as const
+
+const MAX_REJECTED_USER_REQUEST_IDS = 50
 
 /**
  * The RequestsController is responsible for building different user request types and managing their associated actions (within an action window).
@@ -112,6 +115,11 @@ export class RequestsController extends EventEmitter {
   userRequests: UserRequest[] = []
 
   userRequestsWaitingAccountSwitch: UserRequest[] = []
+
+  // The ids of the latest user requests the user rejected while nothing signed, broadcast or
+  // awaited the end of a broadcast and no signed transaction was held, so that a client without
+  // a dapp promise can tell a rejection that sent nothing from a request that may have been sent.
+  rejectedUserRequestIds: UserRequest['id'][] = []
 
   actions: ActionsController
 
@@ -268,6 +276,9 @@ export class RequestsController extends EventEmitter {
           ;(req.action as Calls).calls[i].id = `${req.id}-${i}`
         })
       }
+      this.rejectedUserRequestIds = this.rejectedUserRequestIds.filter(
+        (rejectedId) => rejectedId !== req.id
+      )
       if (actionPosition === 'first') {
         this.userRequests.unshift(req)
       } else {
@@ -296,7 +307,10 @@ export class RequestsController extends EventEmitter {
         const signAccountOp = this.#getSignAccountOp()
         if (signAccountOp) {
           if (signAccountOp.fromActionId === accountOpAction.id) {
-            this.#updateSignAccountOp({ calls: accountOpAction.accountOp.calls })
+            this.#updateSignAccountOp({
+              calls: accountOpAction.accountOp.calls,
+              recoveryKit: accountOpAction.accountOp.meta?.recoveryKit
+            })
           }
         } else {
           // Even without an initialized SignAccountOpController or Screen, we should still update the portfolio and run the simulation.
@@ -403,13 +417,20 @@ export class RequestsController extends EventEmitter {
           meta.accountAddr,
           meta.chainId
         )
+        accountOpAction.accountOp.meta = getAccountOpMetaWithRecoveryKit(
+          accountOpAction.accountOp,
+          this.userRequests
+        )
         const signAccountOp = this.#getSignAccountOp()
 
         if (accountOpAction.accountOp.calls.length) {
           actionsToAddOrUpdate.push(accountOpAction)
 
           if (signAccountOp && signAccountOp.fromActionId === accountOpAction.id) {
-            this.#updateSignAccountOp({ calls: accountOpAction.accountOp.calls })
+            this.#updateSignAccountOp({
+              calls: accountOpAction.accountOp.calls,
+              recoveryKit: accountOpAction.accountOp.meta?.recoveryKit
+            })
           }
         } else {
           if (signAccountOp && signAccountOp.fromActionId === accountOpAction.id) {
@@ -481,9 +502,11 @@ export class RequestsController extends EventEmitter {
     options?: {
       shouldRemoveSwapAndBridgeRoute?: boolean
       shouldOpenNextRequest?: boolean
+      isUserRejection?: boolean
     }
   ) {
     const userRequestsToRemove: string[] = []
+    const rejectedIds: UserRequest['id'][] = []
 
     requestIds.forEach((requestId) => {
       const userRequest = this.userRequests.find((r) => r.id === requestId)
@@ -508,7 +531,19 @@ export class RequestsController extends EventEmitter {
       }
 
       userRequest.dappPromise?.reject(ethErrors.provider.userRejectedRequest<any>(err))
+      if (
+        !rejectedIds.includes(userRequest.id) &&
+        !this.rejectedUserRequestIds.includes(userRequest.id)
+      ) {
+        rejectedIds.push(userRequest.id)
+      }
     })
+
+    if (options?.isUserRejection && rejectedIds.length) {
+      this.rejectedUserRequestIds = [...this.rejectedUserRequestIds, ...rejectedIds].slice(
+        -MAX_REJECTED_USER_REQUEST_IDS
+      )
+    }
 
     await this.removeUserRequests([...userRequestsToRemove, ...requestIds], options)
   }

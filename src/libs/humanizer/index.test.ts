@@ -3,12 +3,14 @@ import { ethers } from 'ethers'
 
 import { describe, test } from '@jest/globals'
 
+import AmbireAccount from '../../../contracts/compiled/AmbireAccount.json'
 import { DEFAULT_ACCOUNT_LABEL } from '../../consts/account'
 import { Account } from '../../interfaces/account'
 import { Key } from '../../interfaces/keystore'
 import { TypedMessage } from '../../interfaces/userRequest'
 import { AccountOp } from '../accountOp/accountOp'
 import { humanizeAccountOp, humanizeMessage } from './index'
+import { IrCall } from './interfaces'
 import { compareHumanizerVisualizations, compareVisualizations } from './testHelpers'
 import { getAction, getAddressVisualization, getDeadline, getLabel, getToken } from './utils'
 
@@ -334,5 +336,106 @@ describe('with (Account | Key)[] arg', () => {
 
     const irCalls = humanizeAccountOp(accountOp, {})
     compareHumanizerVisualizations(irCalls, expectedVisualizations)
+  })
+})
+
+describe('the recovery kit grant', () => {
+  const abiCoder = ethers.AbiCoder.defaultAbiCoder()
+  const ambireAccount = new ethers.Interface(AmbireAccount.abi)
+  const manager = '0x1111111111111111111111111111111111111111'
+  const auditedAction = '0x2222222222222222222222222222222222222222'
+  const stranger = '0x6969174FD72466430a46e18234D0b530c9FD5f49'
+  const kitSlot = ethers.getAddress(
+    `0x${ethers
+      .keccak256(abiCoder.encode(['string', 'address'], ['kit', auditedAction]))
+      .slice(-40)}`
+  )
+  const kitValue = ethers.keccak256(abiCoder.encode(['address', 'string'], [auditedAction, '']))
+  const kitRequestId = 1
+  const grant = (addr: string, priv: string, fromUserRequestId = kitRequestId) => ({
+    to: accountOp.accountAddr,
+    value: 0n,
+    data: ambireAccount.encodeFunctionData('setAddrPrivilege', [addr, priv]),
+    fromUserRequestId
+  })
+  const commitSetup = {
+    to: manager,
+    value: 0n,
+    data: new ethers.Interface([
+      'function commitSetup(address, bytes32, uint64, bytes, bytes)'
+    ]).encodeFunctionData('commitSetup', [auditedAction, ethers.ZeroHash, 1, '0x', '0x']),
+    fromUserRequestId: kitRequestId
+  }
+  const unrelatedCall = transactions.generic[1]
+  const humanize = (calls: AccountOp['calls']): IrCall[] =>
+    humanizeAccountOp(
+      {
+        ...accountOp,
+        calls,
+        meta: {
+          recoveryKit: { manager, auditedActions: [auditedAction], fromUserRequestId: kitRequestId }
+        }
+      },
+      {}
+    )
+
+  test('is shown as its own action with no warning', () => {
+    const [, kitGrant] = humanize([commitSetup, grant(kitSlot, kitValue)])
+
+    compareHumanizerVisualizations(
+      [kitGrant],
+      [
+        [
+          getAction('Enable recovery module'),
+          getAddressVisualization(auditedAction),
+          getToken(accountOp.accountAddr, 0n, true)
+        ]
+      ]
+    )
+    expect(kitGrant.fullVisualization).not.toContainEqual(
+      expect.objectContaining({ warning: true })
+    )
+    expect(kitGrant.warnings ?? []).toEqual([])
+  })
+
+  test('the same grant and commitSetup from another request keep the danger warning', () => {
+    const [, , otherGrant] = humanize([
+      { ...unrelatedCall, fromUserRequestId: kitRequestId },
+      { ...commitSetup, fromUserRequestId: 2 },
+      grant(kitSlot, kitValue, 2)
+    ])
+
+    expect(otherGrant.fullVisualization?.[0]).toMatchObject({
+      content: 'Update access status',
+      warning: true
+    })
+    expect(otherGrant.warnings).toContainEqual(expect.objectContaining({ level: 'danger' }))
+  })
+
+  test('a grant to an address outside the audited list keeps the warning', () => {
+    const [, strangerGrant] = humanize([
+      commitSetup,
+      grant(stranger, ethers.zeroPadValue('0x01', 32))
+    ])
+
+    expect(strangerGrant.fullVisualization?.[0]).toMatchObject({
+      type: 'action',
+      content: 'Update access status',
+      warning: true
+    })
+    expect(strangerGrant.warnings).toEqual([
+      {
+        content: `This transaction grants control of this account to ${stranger}!`,
+        level: 'danger'
+      }
+    ])
+  })
+
+  test('leaves the warnings of an unrelated call unchanged', () => {
+    const [, , unrelatedInBatch] = humanize([commitSetup, grant(kitSlot, kitValue), unrelatedCall])
+    const [unrelatedAlone] = humanizeAccountOp({ ...accountOp, calls: [unrelatedCall] }, {})
+
+    expect(unrelatedInBatch.warnings).toEqual(unrelatedAlone.warnings)
+    compareHumanizerVisualizations([unrelatedInBatch], [unrelatedAlone.fullVisualization!])
   })
 })

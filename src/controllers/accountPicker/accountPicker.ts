@@ -58,6 +58,7 @@ export const DEFAULT_PAGE_SIZE = 1
 const DEFAULT_SHOULD_SEARCH_FOR_LINKED_ACCOUNTS = true
 const DEFAULT_SHOULD_GET_ACCOUNTS_USED_ON_NETWORKS = true
 const DEFAULT_SHOULD_ADD_NEXT_ACCOUNT_AUTOMATICALLY = true
+const DEFAULT_SHOULD_SELECT_SMART_ACCOUNT_AUTOMATICALLY = false
 
 /**
  * Account Picker Controller
@@ -87,6 +88,7 @@ export class AccountPickerController extends EventEmitter {
     shouldSearchForLinkedAccounts?: boolean
     shouldGetAccountsUsedOnNetworks?: boolean
     shouldAddNextAccountAutomatically?: boolean
+    shouldSelectSmartAccountAutomatically?: boolean
   } | null = null
 
   keyIterator?: KeyIterator | null
@@ -100,6 +102,10 @@ export class AccountPickerController extends EventEmitter {
   shouldGetAccountsUsedOnNetworks = DEFAULT_SHOULD_GET_ACCOUNTS_USED_ON_NETWORKS
 
   shouldAddNextAccountAutomatically = DEFAULT_SHOULD_ADD_NEXT_ACCOUNT_AUTOMATICALLY
+
+  // When set (a newly created seed), the next account selection also selects
+  // the smart account derived on the same slot, so both get added together.
+  shouldSelectSmartAccountAutomatically = DEFAULT_SHOULD_SELECT_SMART_ACCOUNT_AUTOMATICALLY
 
   /* This is only the index of the current page */
   page: number = DEFAULT_PAGE
@@ -211,9 +217,8 @@ export class AccountPickerController extends EventEmitter {
       // Remove smart accounts derived programmatically, because since v4.60.0
       // unused smart accounts are no longer displayed on page.
       .filter((a) => !isSmartAccount(a.account))
-      // The displayed (visible) accounts on page should not include the derived
-      // EOA (basic) accounts only used as smart account keys, they should not
-      // be visible nor importable (or selectable).
+      // The keys derived for a smart account stay out of the basic rows. On a
+      // seed they are listed after the smart accounts and can be selected with them.
       .filter((x) => !isDerivedForSmartAccountKeyOnly(x.index))
       .flatMap((derivedAccount) => {
         const associatedLinkedAccounts = this.#linkedAccounts.filter(
@@ -334,7 +339,45 @@ export class AccountPickerController extends EventEmitter {
       })
     }
 
+    // On a seed (newly created or imported) the wallet lists the key that
+    // controls the slot's smart account as an account of its own, right after
+    // the smart accounts, so the key comes back with its smart account. It
+    // keeps its derivation index, because its private key is derived from it.
+    if (this.shouldListSmartAccountKeys) {
+      const smartAccountKeys = accountsWithStatus
+        .filter(({ account, isLinked }) => isSmartAccount(account) && !isLinked)
+        .flatMap(({ slot }) => {
+          const key = this.#derivedAccounts.find(
+            (a) =>
+              a.slot === slot &&
+              !isSmartAccount(a.account) &&
+              isDerivedForSmartAccountKeyOnly(a.index)
+          )
+          return key ? [key] : []
+        })
+      const accountsWithKeys = [...mergedAccounts, ...smartAccountKeys]
+
+      smartAccountKeys.forEach((key) => {
+        accountsWithStatus.push({
+          ...key,
+          importStatus: getAccountImportStatus({
+            account: key.account,
+            alreadyImportedAccounts: this.#alreadyImportedAccounts,
+            keys: this.#keystore.keys,
+            accountsOnPage: accountsWithKeys,
+            keyIteratorType: this.keyIterator?.type
+          })
+        })
+      })
+    }
+
     return accountsWithStatus
+  }
+
+  // A seed derives the key of each slot's smart account; a private key and a
+  // hardware wallet keep these keys hidden.
+  get shouldListSmartAccountKeys() {
+    return this.shouldSelectSmartAccountAutomatically || this.subType === 'seed'
   }
 
   get allKeysOnPage() {
@@ -401,6 +444,7 @@ export class AccountPickerController extends EventEmitter {
     shouldSearchForLinkedAccounts?: boolean
     shouldGetAccountsUsedOnNetworks?: boolean
     shouldAddNextAccountAutomatically?: boolean
+    shouldSelectSmartAccountAutomatically?: boolean
   }) {
     this.initParams = params
     this.emitUpdate()
@@ -416,7 +460,8 @@ export class AccountPickerController extends EventEmitter {
       pageSize,
       shouldSearchForLinkedAccounts = DEFAULT_SHOULD_SEARCH_FOR_LINKED_ACCOUNTS,
       shouldGetAccountsUsedOnNetworks = DEFAULT_SHOULD_GET_ACCOUNTS_USED_ON_NETWORKS,
-      shouldAddNextAccountAutomatically = DEFAULT_SHOULD_ADD_NEXT_ACCOUNT_AUTOMATICALLY
+      shouldAddNextAccountAutomatically = DEFAULT_SHOULD_ADD_NEXT_ACCOUNT_AUTOMATICALLY,
+      shouldSelectSmartAccountAutomatically = DEFAULT_SHOULD_SELECT_SMART_ACCOUNT_AUTOMATICALLY
     } = this.initParams
 
     await this.reset(false)
@@ -430,6 +475,7 @@ export class AccountPickerController extends EventEmitter {
     this.#alreadyImportedAccounts = [...this.#accounts.accounts]
     this.shouldSearchForLinkedAccounts = shouldSearchForLinkedAccounts
     this.shouldGetAccountsUsedOnNetworks = shouldGetAccountsUsedOnNetworks
+    this.shouldSelectSmartAccountAutomatically = shouldSelectSmartAccountAutomatically
     if (shouldAddNextAccountAutomatically) {
       await this.selectNextAccount()
       await this.addAccounts()
@@ -456,6 +502,7 @@ export class AccountPickerController extends EventEmitter {
     this.hdPathTemplate = undefined
     this.shouldSearchForLinkedAccounts = DEFAULT_SHOULD_SEARCH_FOR_LINKED_ACCOUNTS
     this.shouldGetAccountsUsedOnNetworks = DEFAULT_SHOULD_GET_ACCOUNTS_USED_ON_NETWORKS
+    this.shouldSelectSmartAccountAutomatically = DEFAULT_SHOULD_SELECT_SMART_ACCOUNT_AUTOMATICALLY
     this.pageError = null
 
     this.linkedAccountsLoading = false
@@ -945,9 +992,18 @@ export class AccountPickerController extends EventEmitter {
     this.selectNextAccountStatus = 'LOADING'
     await this.forceEmitUpdate()
 
-    let currentPage: number = this.page
     let nextAccount: AccountWithNetworkMeta | undefined
     const maxPages = 10000 // limit, acts as a safeguard to prevent infinite loops
+
+    // A page lists only one smart account, the lowest unused one, so the smart
+    // account of the picked basic account's slot is on the page only when the
+    // page holds that one slot. The search then pages one slot at a time,
+    // starting from the first slot of the current page.
+    const originalPage = this.page
+    const originalPageSize = this.pageSize
+    const pageSize = this.shouldSelectSmartAccountAutomatically ? 1 : originalPageSize
+    let currentPage: number =
+      pageSize === originalPageSize ? originalPage : (originalPage - 1) * originalPageSize + 1
 
     while (currentPage <= maxPages) {
       // TODO: Flag that excludes getting smart account key addresses
@@ -955,7 +1011,7 @@ export class AccountPickerController extends EventEmitter {
       // eslint-disable-next-line no-await-in-loop
       await this.setPage({
         page: currentPage,
-        pageSize: this.pageSize,
+        pageSize,
         shouldGetAccountsUsedOnNetworks: false,
         shouldSearchForLinkedAccounts: false
       })
@@ -967,15 +1023,37 @@ export class AccountPickerController extends EventEmitter {
         })
       }
 
-      nextAccount = this.accountsOnPage.find(
-        ({ isLinked, account, importStatus }) =>
+      // On a newly created seed the slot's smart account is the first account
+      // to add, and the key that controls it follows; the slot's ordinary
+      // basic account stays unselected. With the flag off, every import picks
+      // the next basic account, never the key of a smart account.
+      const nextAccountOnPage = this.accountsOnPage.find(
+        ({ isLinked, account, importStatus, index }) =>
           importStatus !== ImportStatus.ImportedWithTheSameKeys &&
           !isLinked &&
-          !isSmartAccount(account)
-      )?.account
+          !isDerivedForSmartAccountKeyOnly(index) &&
+          isSmartAccount(account) === this.shouldSelectSmartAccountAutomatically
+      )
+      nextAccount = nextAccountOnPage?.account
 
-      if (nextAccount) {
-        this.selectAccount(nextAccount)
+      if (nextAccountOnPage) {
+        this.selectAccount(nextAccountOnPage.account)
+
+        // The key that controls the smart account is added with it, after it.
+        if (this.shouldSelectSmartAccountAutomatically) {
+          const keyOnTheSameSlot = this.accountsOnPage.find(
+            ({ account, index, slot }) =>
+              slot === nextAccountOnPage.slot &&
+              !isSmartAccount(account) &&
+              isDerivedForSmartAccountKeyOnly(index)
+          )
+          if (
+            keyOnTheSameSlot &&
+            keyOnTheSameSlot.importStatus !== ImportStatus.ImportedWithTheSameKeys
+          ) {
+            this.selectAccount(keyOnTheSameSlot.account)
+          }
+        }
         break
       }
 
@@ -985,6 +1063,14 @@ export class AccountPickerController extends EventEmitter {
 
     // TODO: Should never happen, but could benefit with better error handling
     if (!nextAccount) console.error('accountPicker: no next account found')
+
+    // Back to the picker's own page size, on the page that holds the selected slot
+    if (pageSize !== originalPageSize) {
+      await this.setPage({
+        page: nextAccount ? Math.ceil(currentPage / originalPageSize) : originalPage,
+        pageSize: originalPageSize
+      })
+    }
 
     this.selectNextAccountStatus = 'SUCCESS'
     await this.forceEmitUpdate()
@@ -1385,6 +1471,7 @@ export class AccountPickerController extends EventEmitter {
       allKeysOnPage: this.allKeysOnPage,
       selectedAccounts: this.selectedAccounts,
       addedAccountsFromCurrentSession: this.addedAccountsFromCurrentSession,
+      shouldListSmartAccountKeys: this.shouldListSmartAccountKeys,
       type: this.type,
       subType: this.subType,
       isPageLocked: this.isPageLocked

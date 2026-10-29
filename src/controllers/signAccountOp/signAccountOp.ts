@@ -36,6 +36,7 @@ import { Hex } from '../../interfaces/hex'
 import { ExternalKey, ExternalSignerControllers, InternalKey, Key } from '../../interfaces/keystore'
 import { Network } from '../../interfaces/network'
 import { RPCProvider } from '../../interfaces/provider'
+import { AccountOpRecoveryKit } from '../../interfaces/recoveryKit'
 import {
   SignAccountOpError,
   TraceCallDiscoveryStatus,
@@ -63,16 +64,15 @@ import {
   GasRecommendation
 } from '../../libs/gasPrice/gasPrice'
 import { humanizeAccountOp } from '../../libs/humanizer'
+import { isRecoveryKitPrivilegeWrite } from '../../libs/humanizer/modules/Privileges/privileges'
 import { hasRelayerSupport } from '../../libs/networks/networks'
 import { AbstractPaymaster } from '../../libs/paymaster/abstractPaymaster'
 import { GetOptions, TokenResult } from '../../libs/portfolio'
 import {
-  adjustEntryPointAuthorization,
   get7702Sig,
   get7702UserOpTypedData,
   getAuthorizationHash,
-  getEIP712Signature,
-  getEntryPointAuthorization,
+  getEntryPointAuthorizationSignature,
   getExecuteSignature,
   getTypedData,
   wrapStandard,
@@ -150,6 +150,19 @@ export const noStateUpdateStatuses = [
   SigningStatus.WaitingForPaymaster
 ]
 
+// A call to the account itself is refused as malicious, unless it is the recovery kit's
+// grant of a privilege to one of its audited actions
+export const isRefusedCallToSelf = (
+  call: AccountOp['calls'][number],
+  accountOp: Pick<AccountOp, 'accountAddr' | 'calls' | 'meta'>
+): boolean => {
+  if (!isAddress(call.to) || getAddress(call.to) !== getAddress(accountOp.accountAddr)) {
+    return false
+  }
+
+  return !isRecoveryKitPrivilegeWrite(accountOp, call)
+}
+
 export type SignAccountOpUpdateProps = {
   gasPrices?: GasRecommendation[] | null
   feeToken?: TokenResult
@@ -158,6 +171,8 @@ export type SignAccountOpUpdateProps = {
   signingKeyAddr?: Key['addr']
   signingKeyType?: InternalKey['type'] | ExternalKey['type']
   calls?: AccountOp['calls']
+  // set when present, removed when the key is present with no value, kept when the key is left out
+  recoveryKit?: AccountOpRecoveryKit
   rbfAccountOps?: { [key: string]: SubmittedAccountOp | null }
   bundlerGasPrices?: { speeds: GasSpeeds; bundler: BUNDLER }
   blockGasLimit?: bigint
@@ -347,15 +362,12 @@ export class SignAccountOpController extends EventEmitter {
       return { title: invalidAccountOpError, code: 'NO_CALLS' }
     }
 
-    if (
-      this.accountOp.calls.some(
-        (c) => isAddress(c.to) && getAddress(c.to) === getAddress(this.accountOp.accountAddr)
-      )
-    )
+    if (this.accountOp.calls.some((c) => isRefusedCallToSelf(c, this.accountOp))) {
       return {
         title: 'A malicious transaction found in this batch.',
         code: 'CALL_TO_SELF'
       }
+    }
 
     let callError: SignAccountOpError | null = null
 
@@ -796,20 +808,22 @@ export class SignAccountOpController extends EventEmitter {
     await this.#portfolio.simulateAccountOp(this.accountOp)
   }
 
-  update({
-    gasPrices,
-    feeToken,
-    paidBy,
-    speed,
-    signingKeyAddr,
-    signingKeyType,
-    calls,
-    rbfAccountOps,
-    bundlerGasPrices,
-    blockGasLimit,
-    signedTransactionsCount,
-    hasNewEstimation
-  }: SignAccountOpUpdateProps) {
+  update(props: SignAccountOpUpdateProps) {
+    const {
+      gasPrices,
+      feeToken,
+      paidBy,
+      speed,
+      signingKeyAddr,
+      signingKeyType,
+      calls,
+      recoveryKit,
+      rbfAccountOps,
+      bundlerGasPrices,
+      blockGasLimit,
+      signedTransactionsCount,
+      hasNewEstimation
+    } = props
     try {
       // This must be at the top, otherwise it won't be updated because
       // most updates are frozen during the signing process
@@ -841,6 +855,14 @@ export class SignAccountOpController extends EventEmitter {
         }
       }
 
+      if ('recoveryKit' in props) {
+        if (recoveryKit) {
+          this.accountOp.meta = { ...this.accountOp.meta, recoveryKit }
+        } else if (this.accountOp.meta) {
+          delete this.accountOp.meta.recoveryKit
+        }
+      }
+
       if (Array.isArray(calls)) {
         // we should update if the arrays are with diff length
         let shouldUpdate = this.accountOp.calls.length !== calls.length
@@ -853,7 +875,8 @@ export class SignAccountOpController extends EventEmitter {
             if (
               call.to !== newCall.to ||
               call.data !== newCall.data ||
-              call.value !== newCall.value
+              call.value !== newCall.value ||
+              call.fromUserRequestId !== newCall.fromUserRequestId
             )
               shouldUpdate = true
           })
@@ -1867,20 +1890,13 @@ export class SignAccountOpController extends EventEmitter {
         }
 
         if (shouldSignDeployAuth) {
-          const epActivatorTypedData = await getEntryPointAuthorization(
+          if (!this.accountOp.meta) this.accountOp.meta = {}
+          this.accountOp.meta.entryPointAuthorization = await getEntryPointAuthorizationSignature(
             this.account.addr,
             this.#network.chainId,
-            accountState.nonce
+            accountState.nonce,
+            signer
           )
-          const epSignature = await getEIP712Signature(
-            epActivatorTypedData,
-            this.account,
-            accountState,
-            signer,
-            this.#network
-          )
-          if (!this.accountOp.meta) this.accountOp.meta = {}
-          this.accountOp.meta.entryPointAuthorization = adjustEntryPointAuthorization(epSignature)
 
           // after signing is complete, go to paymaster mode
           if (isUsingPaymaster) {

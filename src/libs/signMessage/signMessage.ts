@@ -24,7 +24,7 @@ import { EIP7702Auth } from '../../consts/7702'
 import { PERMIT_2_ADDRESS, UNISWAP_UNIVERSAL_ROUTERS } from '../../consts/addresses'
 import { Account, AccountCreation, AccountId, AccountOnchainState } from '../../interfaces/account'
 import { Hex } from '../../interfaces/hex'
-import { KeystoreSignerInterface } from '../../interfaces/keystore'
+import { KeystoreSignerInterface, standardSigningOnlyPriv } from '../../interfaces/keystore'
 import { Network } from '../../interfaces/network'
 import { EIP7702Signature } from '../../interfaces/signatures'
 import { PlainTextMessage, TypedMessage } from '../../interfaces/userRequest'
@@ -495,6 +495,34 @@ export async function getExecuteSignature(
   return wrapStandard(await signer.signTypedData(typedData))
 }
 
+// the account accepts an unprotected signature only from a key whose
+// privilege on it is above the standard-signing value, so the mode follows
+// the privilege the key holds on this account, not only the key's own flag
+function canSignUnprotected(
+  accountState: AccountOnchainState,
+  signer: KeystoreSignerInterface
+): boolean {
+  if (!signer.key.dedicatedToOneSA) return false
+
+  const entry = Object.entries(accountState.associatedKeys).find(([addr]) =>
+    isSameAddr(addr, signer.key.addr)
+  )
+  if (!entry) return false
+
+  return BigInt(entry[1]) > BigInt(standardSigningOnlyPriv)
+}
+
+function isAmbireOperation(message: TypedMessage): boolean {
+  return message.primaryType === 'AmbireOperation'
+}
+
+function isAmbireAccountOperation(message: TypedMessage): boolean {
+  return (
+    message.primaryType === 'AmbireExecuteAccountOp' ||
+    message.primaryType === 'Ambire4337AccountOp'
+  )
+}
+
 export async function getPlainTextSignature(
   messageHex: PlainTextMessage['message'],
   network: Network,
@@ -503,8 +531,6 @@ export async function getPlainTextSignature(
   signer: KeystoreSignerInterface,
   isOG = false
 ): Promise<string> {
-  const dedicatedToOneSA = signer.key.dedicatedToOneSA
-
   if (!account.creation) {
     const signature = await signer.signMessage(messageHex)
     return signature
@@ -537,7 +563,7 @@ export async function getPlainTextSignature(
   }
 
   // if it's safe, we proceed
-  if (dedicatedToOneSA) {
+  if (canSignUnprotected(accountState, signer)) {
     return wrapUnprotected(await signer.signMessage(messageHex))
   }
 
@@ -599,15 +625,6 @@ export async function getEIP712Signature(
     return wrapUnprotected(await signer.signTypedData(message))
   }
 
-  // we do not allow signers who are not dedicated to one account to sign eip-712
-  // messages in v2 as it could lead to reusing that key from
-  const dedicatedToOneSA = signer.key.dedicatedToOneSA
-  if (!dedicatedToOneSA) {
-    throw new Error(
-      `Signer with address ${signer.key.addr} does not have privileges to execute this operation. Please choose a different signer and try again`
-    )
-  }
-
   if ('AmbireReadableOperation' in message.types) {
     const ambireReadableOperation = message.message as AmbireReadableOperation
     if (isSameAddr(ambireReadableOperation.addr, account.addr)) {
@@ -629,7 +646,29 @@ export async function getEIP712Signature(
     return wrapWallet(signature, account.addr)
   }
 
-  return wrapUnprotected(await signer.signTypedData(message))
+  // the account's own operation types authorise its calls directly, and no
+  // request from outside has a reason to send them
+  if (isAmbireAccountOperation(message)) {
+    throw new Error(
+      'Signing this eip-712 message is disallowed as it is an Ambire account operation. Please contact support'
+    )
+  }
+
+  // a raw signature over any AmbireOperation, whatever its domain, becomes by
+  // its last byte a standard signature over the inner hash on every account
+  // where the key holds a privilege, so such an input is always wrapped again
+  if (!isAmbireOperation(message) && canSignUnprotected(accountState, signer)) {
+    return wrapUnprotected(await signer.signTypedData(message))
+  }
+
+  // the typed data is bound to this account by signing its digest inside the
+  // account's envelope; the account builds the envelope with the chain it
+  // runs on, so the network's chain id is used, not the domain's
+  const digest = hexlify(
+    TypedDataUtils.eip712Hash(adaptTypedMessageForMetaMaskSigUtil(message), SignTypedDataVersion.V4)
+  )
+  const typedData = getTypedData(network.chainId, account.addr, digest)
+  return wrapStandard(await signer.signTypedData(typedData))
 }
 
 // get the typedData for the first ERC-4337 deploy txn
@@ -642,10 +681,16 @@ export async function getEntryPointAuthorization(
   return getTypedData(chainId, addr, hexlify(hash))
 }
 
-export function adjustEntryPointAuthorization(entryPointSig: string): string {
-  // since normally when we sign an EIP-712 request, we wrap it in Unprotected,
-  // we adjust the entry point authorization signature so we could execute a txn
-  return wrapStandard(entryPointSig.substring(0, entryPointSig.length - 2))
+// sign the authorization for the first ERC-4337 deploy txn; the envelope is
+// built here so that none can come from outside
+export async function getEntryPointAuthorizationSignature(
+  addr: AccountId,
+  chainId: bigint,
+  nonce: bigint,
+  signer: KeystoreSignerInterface
+): Promise<string> {
+  const entryPointAuthorization = await getEntryPointAuthorization(addr, chainId, nonce)
+  return wrapStandard(await signer.signTypedData(entryPointAuthorization))
 }
 
 // the hash the user needs to eth_sign in order for his EOA to turn smarter

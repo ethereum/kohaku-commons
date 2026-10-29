@@ -42,6 +42,7 @@ import PancakeModule from './modules/Pancake'
 import { postProcessing } from './modules/PostProcessing/postProcessModule'
 import preProcessHumanizer from './modules/PreProcess'
 import privilegeHumanizer from './modules/Privileges'
+import recoveryManagerHumanizer from './modules/RecoveryManager'
 import singletonFactory from './modules/SingletonFactory'
 import { SocketModule } from './modules/Socket'
 import sushiSwapModule from './modules/Sushiswap'
@@ -75,6 +76,7 @@ export const humanizerCallModules: HumanizerCallModule[] = [
   aaveHumanizer,
   WALLETModule,
   privilegeHumanizer,
+  recoveryManagerHumanizer,
   sushiSwapModule,
   legendsModule,
   singletonFactory,

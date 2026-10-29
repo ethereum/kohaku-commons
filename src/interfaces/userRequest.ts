@@ -6,6 +6,7 @@ import { PaymasterService } from '../libs/erc7677/types'
 import { AccountId } from './account'
 import { Dapp, DappProviderRequest } from './dapp'
 import { Hex } from './hex'
+import { RecoveryKit } from './recoveryKit'
 import { EIP7702Signature } from './signatures'
 
 export interface Calls {
@@ -61,6 +62,8 @@ export interface SignUserRequest {
     submittedAccountOp?: any
     activeRouteId?: string
     dapp?: Dapp
+    // set only by the wallet itself, never from a dapp's payload
+    recoveryKit?: RecoveryKit
     [key: string]: any
   }
   // defined only when SignUserRequest is built from a DappRequest
