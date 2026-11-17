@@ -233,18 +233,30 @@ export class PrivacyPoolsV1Controller extends EventEmitter {
   async sync(): Promise<void> {
     if (!this.#ppv1Instance || this.syncState === 'syncing') return
 
+    const instance = this.#ppv1Instance
     this.syncState = 'syncing'
     this.emitUpdate()
 
-    this.balance = (await this.#ppv1Instance.balance([])).map((a) =>
-      a.asset.contract === E_ADDRESS ? { ...a, asset: { ...a.asset, contract: ZERO_ADDRESS } } : a
-    )
-    this.notes = (await this.#ppv1Instance.notes([])).map((n) =>
-      n.assetAddress === BigInt(E_ADDRESS) ? { ...n, assetAddress: BigInt(0) } : n
-    )
-    await this.#pluginStorage?.saveToStorage()
+    try {
+      this.balance = (await this.#ppv1Instance.balance([])).map((a) =>
+        a.asset.contract === E_ADDRESS ? { ...a, asset: { ...a.asset, contract: ZERO_ADDRESS } } : a
+      )
+      this.notes = (await this.#ppv1Instance.notes([])).map((n) =>
+        n.assetAddress === BigInt(E_ADDRESS) ? { ...n, assetAddress: BigInt(0) } : n
+      )
+      await this.#pluginStorage?.saveToStorage()
+      this.syncState = 'synced'
+    } catch (e: any) {
+      // The instance was reset or replaced, so this sync no longer owns syncState.
+      if (instance !== this.#ppv1Instance) return
+      this.syncState = 'unsynced'
+      this.emitError({
+        level: 'major',
+        message: 'Failed to sync Privacy Pools balances. Please try again.',
+        error: e instanceof Error ? e : new Error('Unknown error during privacy pools sync')
+      })
+    }
 
-    this.syncState = 'synced'
     this.emitUpdate()
   }
 
