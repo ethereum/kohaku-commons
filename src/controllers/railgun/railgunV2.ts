@@ -650,8 +650,10 @@ export class RailgunV2Controller extends EventEmitter {
       }
       const balanceBefore = sumByContract(this.balance)
 
-      await this.#withWasmLock(() => this.#instance!.broadcast(this.pendingPrivateOperation!))
+      const operation = this.pendingPrivateOperation
+      // Never kept for a retry: after any broadcast attempt the next submit must prepare anew
       this.pendingPrivateOperation = null
+      await this.#withWasmLock(() => this.#instance!.broadcast(operation))
 
       // The SDK's broadcast() resolves once the userOp gets a receipt — even if it
       // reverted on-chain (the WETH relay fee is charged regardless). Confirm the
